@@ -1,0 +1,70 @@
+# Environment
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Testing
+coverage/
+.nyc_output/
+
+# Build outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes (if using local bind mounts)
+data/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# SSL certificates (should be managed externally)
+*.pem
+*.key
+*.crt
+
+# Database dumps
+*.sql.gz
+backup.sql
+
+# Workflow trigger files (ephemeral artifacts)
+.review-trigger
+.test-trigger
+.self-improve-trigger
+
+mobile/ios/
+mobile/android/
+
+.opencode.json
+.opencode/
+
+improvement-findings.json
+improvement-findings*.json
+
+MEMORY.md
+.continue
+.cursor
+.gitea
