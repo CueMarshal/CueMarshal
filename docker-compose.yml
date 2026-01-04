@@ -1,0 +1,712 @@
+services:
+  # ═══════════════════════════════════════
+  # Infrastructure Layer
+  # ═══════════════════════════════════════
+  postgres:
+    image: postgres:18-alpine
+    container_name: cuemarshal-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./infrastructure/postgres/enable-vector.sql:/docker-entrypoint-initdb.d/02-enable-vector.sql:ro
+    networks:
+      - cuemarshal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    container_name: cuemarshal-redis
+    volumes:
+      - redis-data:/data
+      - ./infrastructure/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command:
+      [
+        "redis-server",
+        "/usr/local/etc/redis/redis.conf",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+      ]
+    networks:
+      - cuemarshal
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════
+  # Gitea (Source of Truth)
+  # ═══════════════════════════════════════
+  gitea:
+    image: gitea/gitea:1.25
+    container_name: cuemarshal-gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=postgres:5432
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=${POSTGRES_USER}
+      - GITEA__database__PASSWD=${POSTGRES_PASSWORD}
+    volumes:
+      - gitea-data:/data
+      - ./infrastructure/gitea/app.ini:/etc/templates/app.ini:ro
+    ports:
+      - "3300:3000"
+      - "2223:22"
+    entrypoint:
+      [
+        "/bin/sh",
+        "-c",
+        "if [ ! -f /data/gitea/conf/app.ini ]; then mkdir -p /data/gitea/conf && cp /etc/templates/app.ini /data/gitea/conf/app.ini && chown git:git /data/gitea/conf/app.ini; fi && exec /usr/bin/entrypoint",
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:3000/api/v1/version > /dev/null 2>&1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════
+  # LLM Gateway Layer
+  # ═══════════════════════════════════════
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    container_name: cuemarshal-gateway
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - AZURE_AI_API_KEY=${AZURE_AI_API_KEY}
+      - AZURE_AI_API_BASE=${AZURE_AI_API_BASE}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/litellm
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    volumes:
+      - ./services/gateway/litellm_config.yaml:/app/config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost/health/liveliness')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════
+  # MCP Servers Layer
+  # ═══════════════════════════════════════
+  mcp-gitea:
+    build:
+      context: ./services/mcp-servers
+      dockerfile: gitea-mcp/Dockerfile
+    container_name: cuemarshal-mcp-gitea
+    environment:
+      - MCP_TRANSPORT=http
+      - PORT=80
+      - GITEA_URL=http://gitea:3000
+      - GITEA_TOKEN=${GITEA_BOT_TOKEN}
+    depends_on:
+      gitea:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  mcp-conductor:
+    build:
+      context: ./services/mcp-servers
+      dockerfile: conductor-mcp/Dockerfile
+    container_name: cuemarshal-mcp-conductor
+    environment:
+      - MCP_TRANSPORT=http
+      - PORT=80
+      - CONDUCTOR_URL=${CONDUCTOR_URL}
+      - CONDUCTOR_SECRET=${CONDUCTOR_SECRET}
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  mcp-system:
+    build:
+      context: ./services/mcp-servers
+      dockerfile: system-mcp/Dockerfile
+    container_name: cuemarshal-mcp-system
+    environment:
+      - MCP_TRANSPORT=http
+      - PORT=80
+      - GATEWAY_URL=http://gateway
+      - GATEWAY_API_KEY=${LITELLM_MASTER_KEY}
+      - REDIS_URL=${REDIS_URL}
+      - CONDUCTOR_URL=${CONDUCTOR_URL}
+      - CONDUCTOR_SECRET=${CONDUCTOR_SECRET}
+      - DATABASE_URL=${DATABASE_URL}
+      - LOKI_URL=http://loki:3100
+      - PROMETHEUS_URL=http://prometheus:9090
+      - GRAFANA_URL=http://grafana:3000
+      - GRAFANA_TOKEN=${GRAFANA_SERVICE_TOKEN}
+    depends_on:
+      gateway:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      loki:
+        condition: service_started
+      prometheus:
+        condition: service_started
+      grafana:
+        condition: service_started
+    networks:
+      - cuemarshal
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  mcp-vector:
+    build:
+      context: ./services/mcp-servers
+      dockerfile: vector-mcp/Dockerfile
+    container_name: cuemarshal-mcp-vector
+    environment:
+      - MCP_TRANSPORT=http
+      - PORT=80
+      - DATABASE_URL=${DATABASE_URL}
+      - GATEWAY_URL=http://gateway
+      - GATEWAY_API_KEY=${LITELLM_MASTER_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  mcp-sonar:
+    build:
+      context: ./services/mcp-servers
+      dockerfile: sonar-mcp/Dockerfile
+    container_name: cuemarshal-mcp-sonar
+    environment:
+      - MCP_TRANSPORT=http
+      - PORT=80
+      - SONAR_URL=http://sonarqube:9000/sonar
+      - SONAR_TOKEN=${SONAR_TOKEN}
+      - SONAR_PROJECT_KEY=${SONAR_PROJECT_KEY:-cuemarshal}
+    depends_on:
+      sonarqube:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════
+  # Conductor (Orchestration Layer)
+  # ═══════════════════════════════════════
+  conductor:
+    build:
+      context: ./services/conductor
+      dockerfile: Dockerfile
+    container_name: cuemarshal-conductor
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+    environment:
+      - PORT=80
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - GITEA_URL=http://gitea:3000
+      - GITEA_TOKEN=${GITEA_BOT_TOKEN}
+      - GATEWAY_URL=http://gateway
+      - GATEWAY_API_KEY=${GATEWAY_API_KEY}
+      - MCP_GITEA_URL=http://mcp-gitea
+      - MCP_CONDUCTOR_URL=http://mcp-conductor
+      - MCP_SYSTEM_URL=http://mcp-system
+      - MCP_VECTOR_URL=http://mcp-vector
+      - MCP_SONAR_URL=http://mcp-sonar
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - CONDUCTOR_SECRET=${CONDUCTOR_SECRET}
+      - CONDUCTOR_ORG=${CONDUCTOR_ORG}
+      - CHAT_MODEL=${CHAT_MODEL:-tier2}
+      - DECOMPOSE_MODEL=${DECOMPOSE_MODEL:-tier2}
+      - PLANNING_MODEL=${PLANNING_MODEL:-gpt-4o}
+      - TOTAL_MONTHLY_BUDGET_USD=${TOTAL_MONTHLY_BUDGET_USD:-100}
+      - SELF_IMPROVE_BUDGET_PCT=${SELF_IMPROVE_BUDGET_PCT:-10}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - NODE_ENV=${NODE_ENV:-production}
+    volumes:
+      - gitea-tokens:/tokens:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      gitea:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+      mcp-gitea:
+        condition: service_healthy
+      mcp-conductor:
+        condition: service_healthy
+      mcp-system:
+        condition: service_healthy
+      mcp-vector:
+        condition: service_healthy
+      mcp-sonar:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════
+  # Execution Layer - Runners
+  # ═══════════════════════════════════════
+  runner-1:
+    build:
+      context: ./services
+      dockerfile: runner/Dockerfile
+    container_name: cuemarshal-runner-1
+    environment:
+      - GITEA_URL=http://gitea:3000
+      - GITEA_TOKEN=${GITEA_BOT_TOKEN}
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${RUNNER_REGISTRATION_TOKEN}
+      - RUNNER_NAME=cuemarshal-runner-1
+      - RUNNER_LABELS=self-hosted,opencode
+      - OPENAI_API_KEY=${GATEWAY_API_KEY}
+      - CONDUCTOR_URL=${CONDUCTOR_URL}
+      - CONDUCTOR_SECRET=${CONDUCTOR_SECRET}
+      - DATABASE_URL=${DATABASE_URL}
+      - SONAR_TOKEN=${SONAR_TOKEN}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - runner-1-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gitea-tokens:/tokens:ro
+    depends_on:
+      gitea:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+      conductor:
+        condition: service_healthy
+      mcp-gitea:
+        condition: service_healthy
+      mcp-conductor:
+        condition: service_healthy
+      mcp-system:
+        condition: service_healthy
+      mcp-vector:
+        condition: service_healthy
+      mcp-sonar:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    restart: unless-stopped
+
+  runner-2:
+    build:
+      context: ./services
+      dockerfile: runner/Dockerfile
+    container_name: cuemarshal-runner-2
+    environment:
+      - GITEA_URL=http://gitea:3000
+      - GITEA_TOKEN=${GITEA_BOT_TOKEN}
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${RUNNER_REGISTRATION_TOKEN}
+      - RUNNER_NAME=cuemarshal-runner-2
+      - RUNNER_LABELS=self-hosted,opencode
+      - OPENAI_API_KEY=${GATEWAY_API_KEY}
+      - CONDUCTOR_URL=${CONDUCTOR_URL}
+      - CONDUCTOR_SECRET=${CONDUCTOR_SECRET}
+      - DATABASE_URL=${DATABASE_URL}
+      - SONAR_TOKEN=${SONAR_TOKEN}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - runner-2-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gitea-tokens:/tokens:ro
+    depends_on:
+      gitea:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+      conductor:
+        condition: service_healthy
+      mcp-gitea:
+        condition: service_healthy
+      mcp-conductor:
+        condition: service_healthy
+      mcp-system:
+        condition: service_healthy
+      mcp-vector:
+        condition: service_healthy
+      mcp-sonar:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════
+  # Initialization (runs once, then exits)
+  # ═══════════════════════════════════════
+  init-gitea:
+    image: gitea/gitea:1.25
+    container_name: cuemarshal-init-gitea
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/init/init-gitea.sh"]
+    environment:
+      - GITEA_URL=http://gitea:3000
+      - GITEA_ADMIN_USER=${GITEA_ADMIN_USER:-cuemarshal-admin}
+      - GITEA_ADMIN_PASSWORD=${GITEA_ADMIN_PASSWORD}
+      - GITEA_ADMIN_EMAIL=${GITEA_ADMIN_EMAIL:-admin@cuemarshal.local}
+      - CONDUCTOR_ORG=${CONDUCTOR_ORG:-cuemarshal}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - API_SECRET_KEY=${API_SECRET_KEY}
+      - SONAR_URL=http://sonarqube:9000/sonar
+      - SONAR_ADMIN_PASSWORD=${SONAR_ADMIN_PASSWORD:-${GITEA_ADMIN_PASSWORD}}
+      - SONAR_PROJECT_KEY=${SONAR_PROJECT_KEY:-cuemarshal}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+    volumes:
+      - ./infrastructure/gitea/init-gitea.sh:/init/init-gitea.sh:ro
+      - .:/source:ro
+      - gitea-tokens:/tokens
+      - gitea-data:/data
+    depends_on:
+      gitea:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    restart: "no"
+
+  # ═══════════════════════════════════════
+  # Reverse Proxy
+  # ═══════════════════════════════════════
+  nginx:
+    image: nginx:alpine
+    container_name: cuemarshal-nginx
+    ports:
+      - "8180:80"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - gitea
+      - conductor
+    networks:
+      - cuemarshal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════
+  # Optional: Ollama (Local Models)
+  # ═══════════════════════════════════════
+  ollama:
+    image: ollama/ollama:latest
+    container_name: cuemarshal-ollama
+    profiles: ["ollama"]
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - cuemarshal
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  # Prometheus (Monitoring)
+  prometheus:
+    image: prom/prometheus:v3.9.1
+    container_name: cuemarshal-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    networks:
+      - cuemarshal
+
+  # Grafana (Visualization)
+  grafana:
+    image: grafana/grafana:10.4.3
+    container_name: cuemarshal-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:8180/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      # Google OAuth SSO (enabled when GOOGLE_CLIENT_ID is set)
+      GF_AUTH_GOOGLE_ENABLED: ${GOOGLE_CLIENT_ID:+true}
+      GF_AUTH_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GF_AUTH_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GF_AUTH_GOOGLE_SCOPES: "openid email profile"
+      GF_AUTH_GOOGLE_AUTH_URL: "https://accounts.google.com/o/oauth2/v2/auth"
+      GF_AUTH_GOOGLE_TOKEN_URL: "https://oauth2.googleapis.com/token"
+      GF_AUTH_GOOGLE_ALLOW_SIGN_UP: "true"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+      - loki
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.50"
+        reservations:
+          memory: 128M
+          cpus: "0.25"
+    networks:
+      - cuemarshal
+
+  # Loki (Log Aggregation)
+  loki:
+    image: grafana/loki:2.9.8
+    container_name: cuemarshal-loki
+    restart: unless-stopped
+    command:
+      - "-config.file=/etc/loki/config.yml"
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.50"
+        reservations:
+          memory: 128M
+          cpus: "0.25"
+    networks:
+      - cuemarshal
+
+  # Promtail (Log Shipper)
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: cuemarshal-promtail
+    restart: unless-stopped
+    environment:
+      DOCKER_API_VERSION: "1.44"
+    command:
+      - "-config.file=/etc/promtail/config.yml"
+    volumes:
+      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail-positions:/tmp
+    depends_on:
+      - loki
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+    networks:
+      - cuemarshal
+
+  # ═══════════════════════════════════════
+  # Code Quality Analysis
+  # ═══════════════════════════════════════
+  sonarqube:
+    image: sonarqube:26.2.0.119303-community
+    container_name: cuemarshal-sonarqube
+    environment:
+      SONAR_WEB_CONTEXT: /sonar
+      SONAR_JDBC_URL: jdbc:postgresql://postgres:5432/sonarqube
+      SONAR_JDBC_USERNAME: ${POSTGRES_USER}
+      SONAR_JDBC_PASSWORD: ${POSTGRES_PASSWORD}
+      # Enable SSO header authentication when Google OAuth is configured
+      SONAR_WEB_SSO_ENABLE: ${GOOGLE_CLIENT_ID:+true}
+      SONAR_WEB_SSO_LOGIN_HEADER: ${GOOGLE_CLIENT_ID:+X-Forwarded-User}
+      SONAR_WEB_SSO_NAME_HEADER: ${GOOGLE_CLIENT_ID:+X-Forwarded-User}
+      SONAR_WEB_SSO_EMAIL_HEADER: ${GOOGLE_CLIENT_ID:+X-Forwarded-Email}
+      SONAR_WEB_SSO_GROUPS_HEADER: ${GOOGLE_CLIENT_ID:+X-Forwarded-Groups}
+    volumes:
+      - sonarqube-data:/opt/sonarqube/data
+      - sonarqube-extensions:/opt/sonarqube/extensions
+      - sonarqube-logs:/opt/sonarqube/logs
+    ports:
+      - "127.0.0.1:9000:9000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/sonar/api/system/status | grep -q UP"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    restart: unless-stopped
+
+  # OAuth2 Proxy for SonarQube (enables Google SSO)
+  # Only deployed when Google OAuth is configured (use: docker compose --profile google-sso up)
+  # Access SonarQube via: http://localhost:9001 (proxied with Google auth)
+  sonar-oauth-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+    container_name: cuemarshal-sonar-oauth-proxy
+    profiles: ["google-sso"]
+    command:
+      - --provider=google
+      - --client-id=${GOOGLE_CLIENT_ID}
+      - --client-secret=${GOOGLE_CLIENT_SECRET}
+      - --cookie-secret=${CONDUCTOR_SECRET}
+      - --email-domain=*
+      - --upstream=http://sonarqube:9000
+      - --http-address=0.0.0.0:9001
+      - --redirect-url=http://localhost:9001/oauth2/callback
+      - --pass-user-headers=true
+      - --pass-access-token=false
+      - --set-xauthrequest=true
+      - --cookie-expire=168h
+    ports:
+      - "127.0.0.1:9001:9001"
+    depends_on:
+      sonarqube:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    restart: unless-stopped
+
+networks:
+  cuemarshal:
+    driver: bridge
+    name: cuemarshal-network
+
+volumes:
+  postgres-data:
+    name: cuemarshal-postgres-data
+  redis-data:
+    name: cuemarshal-redis-data
+  gitea-data:
+    name: cuemarshal-gitea-data
+  gitea-tokens:
+    name: cuemarshal-gitea-tokens
+  runner-1-data:
+    name: cuemarshal-runner-1-data
+  runner-2-data:
+    name: cuemarshal-runner-2-data
+  nginx-logs:
+    name: cuemarshal-nginx-logs
+  ollama-data:
+    name: cuemarshal-ollama-data
+  prometheus-data:
+    name: cuemarshal-prometheus-data
+  grafana-data:
+    name: cuemarshal-grafana-data
+  loki-data:
+    name: cuemarshal-loki-data
+  promtail-positions:
+    name: cuemarshal-promtail-positions
+  sonarqube-data:
+    name: cuemarshal-sonarqube-data
+  sonarqube-extensions:
+    name: cuemarshal-sonarqube-extensions
+  sonarqube-logs:
+    name: cuemarshal-sonarqube-logs
