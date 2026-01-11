@@ -1,0 +1,399 @@
+model_list:
+  # ═══════════════════════════════════════════════════════
+  # Tier 1: Simple tasks (formatting, docs, typos, labels)
+  # Priority: Groq (1) → Gemini 2.5 Flash (2) → Azure AI (3) → Local (4)
+  # ═══════════════════════════════════════════════════════
+  - model_name: "tier1"
+    litellm_params:
+      model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+      api_key: "os.environ/GROQ_API_KEY"
+      order: 1
+    model_info:
+      max_tokens: 8192
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "tier1"
+    litellm_params:
+      model: "gemini/gemini-2.5-flash"
+      api_key: "os.environ/GEMINI_API_KEY"
+      order: 2
+    model_info:
+      max_tokens: 8192
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "tier1"
+    litellm_params:
+      model: "azure_ai/kimi-k2.5"
+      api_key: "os.environ/AZURE_AI_API_KEY"
+      api_base: "os.environ/AZURE_AI_API_BASE"
+      order: 3
+    model_info:
+      max_tokens: 8192
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "tier1"
+    litellm_params:
+      model: "openai/qwen3-coder-30b"
+      api_base: "http://host.docker.internal:1234/v1"
+      api_key: "local"
+      order: 4
+    model_info:
+      max_tokens: 8192
+      mode: chat
+      supports_function_calling: true
+
+  # ═══════════════════════════════════════════════════════
+  # Tier 2: Standard tasks (features, bugs, reviews, tests)
+  # ═══════════════════════════════════════════════════════
+  - model_name: "tier2"
+    litellm_params:
+      model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+      api_key: "os.environ/GROQ_API_KEY"
+      order: 1
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "tier2"
+    litellm_params:
+      model: "gemini/gemini-2.5-flash"
+      api_key: "os.environ/GEMINI_API_KEY"
+      order: 2
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "tier2"
+    litellm_params:
+      model: "azure_ai/gpt-5.2-chat"
+      api_key: "os.environ/AZURE_AI_API_KEY"
+      api_base: "os.environ/AZURE_AI_API_BASE"
+      order: 3
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "tier2"
+    litellm_params:
+      model: "openai/qwen3-coder-30b"
+      api_base: "http://host.docker.internal:1234/v1"
+      api_key: "local"
+      order: 4
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  # ═══════════════════════════════════════════════════════
+  # Tier 3: Complex tasks (architecture, security, refactor)
+  # ═══════════════════════════════════════════════════════
+  - model_name: "tier3"
+    litellm_params:
+      model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+      api_key: "os.environ/GROQ_API_KEY"
+      order: 1
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "tier3"
+    litellm_params:
+      model: "gemini/gemini-2.5-flash"
+      api_key: "os.environ/GEMINI_API_KEY"
+      order: 2
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "tier3"
+    litellm_params:
+      model: "azure_ai/gpt-5.2-chat"
+      api_key: "os.environ/AZURE_AI_API_KEY"
+      api_base: "os.environ/AZURE_AI_API_BASE"
+      order: 3
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "tier3"
+    litellm_params:
+      model: "openai/qwen3-coder-30b"
+      api_base: "http://host.docker.internal:1234/v1"
+      api_key: "local"
+      order: 4
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  # ═══════════════════════════════════════════════════════
+  # OpenAI Model Name Aliases
+  # ═══════════════════════════════════════════════════════
+
+  - model_name: "gpt-4o-mini"
+    litellm_params:
+      model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+      api_key: "os.environ/GROQ_API_KEY"
+      order: 1
+    model_info:
+      max_tokens: 8192
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4o-mini"
+    litellm_params:
+      model: "gemini/gemini-2.5-flash"
+      api_key: "os.environ/GEMINI_API_KEY"
+      order: 2
+    model_info:
+      max_tokens: 8192
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4o-mini"
+    litellm_params:
+      model: "azure_ai/kimi-k2.5"
+      api_key: "os.environ/AZURE_AI_API_KEY"
+      api_base: "os.environ/AZURE_AI_API_BASE"
+      order: 3
+    model_info:
+      max_tokens: 8192
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4o-mini"
+    litellm_params:
+      model: "openai/qwen3-coder-30b"
+      api_base: "http://host.docker.internal:1234/v1"
+      api_key: "local"
+      order: 4
+    model_info:
+      max_tokens: 8192
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4o"
+    litellm_params:
+      model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+      api_key: "os.environ/GROQ_API_KEY"
+      order: 1
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4o"
+    litellm_params:
+      model: "gemini/gemini-2.5-flash"
+      api_key: "os.environ/GEMINI_API_KEY"
+      order: 2
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4o"
+    litellm_params:
+      model: "azure_ai/gpt-5.2-chat"
+      api_key: "os.environ/AZURE_AI_API_KEY"
+      api_base: "os.environ/AZURE_AI_API_BASE"
+      order: 3
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4o"
+    litellm_params:
+      model: "openai/qwen3-coder-30b"
+      api_base: "http://host.docker.internal:1234/v1"
+      api_key: "local"
+      order: 4
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4.1"
+    litellm_params:
+      model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+      api_key: "os.environ/GROQ_API_KEY"
+      order: 1
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4.1"
+    litellm_params:
+      model: "gemini/gemini-2.5-flash"
+      api_key: "os.environ/GEMINI_API_KEY"
+      order: 2
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4.1"
+    litellm_params:
+      model: "azure_ai/gpt-5.2-chat"
+      api_key: "os.environ/AZURE_AI_API_KEY"
+      api_base: "os.environ/AZURE_AI_API_BASE"
+      order: 3
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4.1"
+    litellm_params:
+      model: "openai/qwen3-coder-30b"
+      api_base: "http://host.docker.internal:1234/v1"
+      api_key: "local"
+      order: 4
+    model_info:
+      max_tokens: 32768
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4.1-mini"
+    litellm_params:
+      model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+      api_key: "os.environ/GROQ_API_KEY"
+      order: 1
+    model_info:
+      max_tokens: 8192
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4.1-mini"
+    litellm_params:
+      model: "gemini/gemini-2.5-flash"
+      api_key: "os.environ/GEMINI_API_KEY"
+      order: 2
+    model_info:
+      max_tokens: 8192
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4.1-mini"
+    litellm_params:
+      model: "azure_ai/kimi-k2.5"
+      api_key: "os.environ/AZURE_AI_API_KEY"
+      api_base: "os.environ/AZURE_AI_API_BASE"
+      order: 3
+    model_info:
+      max_tokens: 8192
+      mode: chat
+      supports_function_calling: true
+
+  - model_name: "gpt-4.1-mini"
+    litellm_params:
+      model: "openai/qwen3-coder-30b"
+      api_base: "http://host.docker.internal:1234/v1"
+      api_key: "local"
+      order: 4
+    model_info:
+      max_tokens: 8192
+      mode: chat
+      supports_function_calling: true
+
+router_settings:
+  # Use simple-shuffle routing (default, recommended) with order-based priority
+  # With enable_pre_call_checks=true, the router respects the 'order' field:
+  # Groq (order: 1) → Gemini 2.5 Flash (order: 2) → Azure AI (order: 3) → Local (order: 4)
+  # Simple-shuffle picks randomly among deployments with the same order value
+  routing_strategy: "simple-shuffle"
+  
+  # Pre-call health checks prevent sending requests to providers that are already down
+  # REQUIRED for 'order' field to work - filters to lowest available order before routing
+  enable_pre_call_checks: true
+  
+  # Retry configuration: num_retries controls fallback across providers
+  # With 4 providers per tier: initial attempt + 3 retries covers all
+  num_retries: 3
+  
+  # If a provider fails with certain errors (rate limit, timeout, etc.), 
+  # the router should immediately try the next provider
+  retry_after: 5
+  
+  # Timeout for each provider attempt (seconds)
+  # Prevents a hanging provider from consuming the entire workflow timeout
+  timeout: 120
+  
+  # DO NOT set allowed_fails here. When allowed_fails differs from the litellm
+  # default (3), it activates legacy v1 cooldown logic that requires N+1 failures
+  # before cooling down a provider. Without it, the v2 logic kicks in, which
+  # immediately cools down a provider on the FIRST 429 rate-limit error and
+  # retries with a different healthy provider in the same model group.
+  
+  # cooldown_time: seconds to keep a failed provider in cooldown before retrying it
+  cooldown_time: 60
+  
+  fallbacks:
+    # Core tier fallbacks - each tier falls back to the others
+    - tier1: ["tier2", "tier3"]
+    - tier2: ["tier1", "tier3"]
+    - tier3: ["tier2", "tier1"]
+    
+    # Provider-level fallback via order-based priority:
+    # Pre-call checks filter deployments by 'order' field (lowest = highest priority):
+    # All tiers: Groq (1) → Gemini 2.5 Flash (2) → Azure AI (3) → Local (4)
+    #
+    # These aliases map to tier fallback chains if a tier-specific request fails
+    - gpt-4o-mini: ["tier2", "tier3"]      # maps to tier1; fallback chain: tier2, tier3
+    - gpt-4o: ["tier1", "tier3"]           # maps to tier2; fallback chain: tier1, tier3
+    - gpt-4.1: ["tier2", "tier1"]          # maps to tier3; fallback chain: tier2, tier1
+    - gpt-4.1-mini: ["tier2", "tier3"]     # maps to tier1
+    - gpt-4.1-nano: ["tier2", "tier3"]     # maps to tier1
+    - gpt-5-nano: ["tier2", "tier3"]       # maps to tier1
+    - gpt-5-mini: ["tier2", "tier3"]       # maps to tier1
+    
+  model_group_alias:
+    "gpt-4o-mini": "tier1"
+    "gpt-4o": "tier2"
+    "gpt-4.1": "tier3"
+    "gpt-4.1-mini": "tier1"
+    "gpt-4.1-nano": "tier1"
+    "gpt-5-nano": "tier1"
+    "gpt-5-mini": "tier1"
+
+general_settings:
+  master_key: "os.environ/LITELLM_MASTER_KEY"
+  database_url: "os.environ/DATABASE_URL"
+  public_routes: ["/v1/models", "/models", "/health", "/health/", "/health/liveliness"]
+  drop_params: true
+  set_verbose: false
+  json_logs: true
+  max_parallel_requests: 100
+  global_max_parallel_requests: 1000
+  
+  # CRITICAL: These status codes trigger fallback instead of returning error to client
+  # Rate limit (429), Service unavailable (503), and Gateway timeout (504) should trigger fallback
+  fallback_on_status_codes: [429, 500, 502, 503, 504]
+
+litellm_settings:
+  drop_params: true
+  modify_params: true
+  cache: true
+  cache_params:
+    type: "redis"
+    host: "os.environ/REDIS_HOST"
+    port: 6379
+    password: "os.environ/REDIS_PASSWORD"
+    ttl: 3600  # 1 hour cache to reduce provider calls
+  success_callback: ["custom_callbacks.cuemarshal_cost_tracker"]
+  failure_callback: ["custom_callbacks.cuemarshal_cost_tracker"]
+  
+  # Rate limit handling: When a provider hits rate limit (429), mark it unhealthy
+  # and fail-faster on subsequent requests while it recovers
+  context_window_fallback_function: null
