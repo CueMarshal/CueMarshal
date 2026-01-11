@@ -1,0 +1,39 @@
+{
+  "name": "cuemarshal-mcp-servers",
+  "version": "0.0.1",
+  "description": "MCP servers for the CueMarshal platform",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "gitea-mcp",
+    "conductor-mcp",
+    "system-mcp",
+    "vector-mcp",
+    "sonar-mcp"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "build:gitea": "npm run build -w shared && npm run build -w gitea-mcp",
+    "build:conductor": "npm run build -w shared && npm run build -w conductor-mcp",
+    "build:system": "npm run build -w shared && npm run build -w system-mcp",
+    "build:vector": "npm run build -w shared && npm run build -w vector-mcp",
+    "build:sonar": "npm run build -w shared && npm run build -w sonar-mcp",
+    "dev:gitea": "npm run dev -w gitea-mcp",
+    "dev:conductor": "npm run dev -w conductor-mcp",
+    "dev:system": "npm run dev -w system-mcp",
+    "dev:vector": "npm run dev -w vector-mcp",
+    "dev:sonar": "npm run dev -w sonar-mcp",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "clean": "rm -rf */dist */node_modules node_modules"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

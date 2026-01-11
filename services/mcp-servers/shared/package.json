@@ -1,0 +1,23 @@
+{
+  "name": "@cuemarshal/mcp-shared",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    "./transport": "./dist/transport.js",
+    "./types": "./dist/types.js",
+    "./auth": "./dist/auth.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  }
+}
