@@ -1,0 +1,54 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "options": {
+        "baseURL": "http://gateway/v1"
+      }
+    }
+  },
+  "permission": {
+    "edit": "grant",
+    "bash": "grant",
+    "write": "grant"
+  },
+  "tools": {
+    "write": true,
+    "edit": true,
+    "bash": true,
+    "read": true,
+    "glob": true,
+    "grep": true
+  },
+  "mcp": {
+    "gitea": {
+      "command": "node",
+      "args": ["/mcp-servers/gitea-mcp/dist/index.js"],
+      "env": {
+        "GITEA_URL": "http://gitea:3000",
+        "GITEA_TOKEN": "${GITEA_TOKEN}",
+        "MCP_TRANSPORT": "stdio"
+      }
+    },
+    "conductor": {
+      "command": "node",
+      "args": ["/mcp-servers/conductor-mcp/dist/index.js"],
+      "env": {
+        "CONDUCTOR_URL": "http://conductor",
+        "CONDUCTOR_SECRET": "${CONDUCTOR_SECRET}",
+        "MCP_TRANSPORT": "stdio"
+      }
+    },
+    "system": {
+      "command": "node",
+      "args": ["/mcp-servers/system-mcp/dist/index.js"],
+      "env": {
+        "GATEWAY_URL": "http://gateway",
+        "GATEWAY_API_KEY": "${OPENAI_API_KEY}",
+        "REDIS_URL": "redis://redis:6379",
+        "CONDUCTOR_URL": "http://conductor",
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}

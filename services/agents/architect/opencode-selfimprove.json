@@ -1,0 +1,33 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "litellm": {
+      "name": "LiteLLM Gateway",
+      "api": "http://127.0.0.1:4101/v1",
+      "npm": "@ai-sdk/openai-compatible",
+      "env": ["OPENAI_API_KEY"],
+      "models": {
+        "tier1": { "name": "Tier 1 - With Fallback", "tool_call": true, "attachment": false }
+      }
+    }
+  },
+  "permission": {
+    "edit": "deny",
+    "bash": "deny",
+    "write": "deny",
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow"
+  },
+  "mcp": {
+    "gitea": {
+      "type": "local",
+      "command": ["node", "/mcp-servers/gitea-mcp/dist/index.js"],
+      "environment": {
+        "GITEA_URL": "${GITEA_URL}",
+        "GITEA_TOKEN": "${GITEA_TOKEN}",
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}

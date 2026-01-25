@@ -1,0 +1,82 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "litellm": {
+      "name": "LiteLLM Gateway",
+      "api": "http://127.0.0.1:4101/v1",
+      "npm": "@ai-sdk/openai-compatible",
+      "env": ["OPENAI_API_KEY"],
+      "models": {
+        "gpt-4o-mini": { "name": "Tier 1 (Simple)", "tool_call": true, "attachment": true },
+        "gpt-4o": { "name": "Tier 2 (Standard)", "tool_call": true, "attachment": true },
+        "gpt-4.1": { "name": "Tier 3 (Complex)", "tool_call": true, "attachment": true },
+        "gpt-4.1-mini": { "name": "Tier 1 Alt", "tool_call": true, "attachment": true },
+        "tier1": { "name": "Tier 1", "tool_call": true, "attachment": true },
+        "tier2": { "name": "Tier 2", "tool_call": true, "attachment": true },
+        "tier3": { "name": "Tier 3", "tool_call": true, "attachment": true }
+      }
+    }
+  },
+  "permission": {
+    "edit": "deny",
+    "bash": "allow",
+    "write": "deny",
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow"
+  },
+  "mcp": {
+    "gitea": {
+      "type": "local",
+      "command": ["node", "/mcp-servers/gitea-mcp/dist/index.js"],
+      "environment": {
+        "GITEA_URL": "http://gitea:3000",
+        "GITEA_TOKEN": "${GITEA_TOKEN}",
+        "MCP_TRANSPORT": "stdio"
+      }
+    },
+    "conductor": {
+      "type": "local",
+      "command": ["node", "/mcp-servers/conductor-mcp/dist/index.js"],
+      "environment": {
+        "CONDUCTOR_URL": "http://conductor",
+        "CONDUCTOR_SECRET": "${CONDUCTOR_SECRET}",
+        "MCP_TRANSPORT": "stdio"
+      }
+    },
+    "system": {
+      "type": "local",
+      "command": ["node", "/mcp-servers/system-mcp/dist/index.js"],
+      "environment": {
+        "GATEWAY_URL": "http://gateway",
+        "GATEWAY_API_KEY": "${OPENAI_API_KEY}",
+        "REDIS_URL": "redis://redis:6379",
+        "CONDUCTOR_URL": "http://conductor",
+        "LOKI_URL": "http://loki:3100",
+        "PROMETHEUS_URL": "http://prometheus:9090",
+        "GRAFANA_URL": "http://grafana:3000",
+        "MCP_TRANSPORT": "stdio"
+      }
+    },
+    "vector": {
+      "type": "local",
+      "command": ["node", "/mcp-servers/vector-mcp/dist/index.js"],
+      "environment": {
+        "DATABASE_URL": "${DATABASE_URL}",
+        "GATEWAY_URL": "http://gateway",
+        "GATEWAY_API_KEY": "${OPENAI_API_KEY}",
+        "MCP_TRANSPORT": "stdio"
+      }
+    },
+    "sonar": {
+      "type": "local",
+      "command": ["node", "/mcp-servers/sonar-mcp/dist/index.js"],
+      "environment": {
+        "SONAR_URL": "http://sonarqube:9000/sonar",
+        "SONAR_TOKEN": "${SONAR_TOKEN}",
+        "SONAR_PROJECT_KEY": "cuemarshal",
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}
