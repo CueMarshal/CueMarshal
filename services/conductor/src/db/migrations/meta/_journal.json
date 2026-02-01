@@ -1,0 +1,1 @@
+{"version":"7","dialect":"postgresql","entries":[{"idx":0,"version":"7","when":1770834003937,"tag":"0000_skinny_norrin_radd","breakpoints":true},{"idx":1,"version":"7","when":1770834100000,"tag":"0001_add_cost_records_indexes","breakpoints":true},{"idx":2,"version":"7","when":1770900000000,"tag":"0002_add_projects_table","breakpoints":true}]}
