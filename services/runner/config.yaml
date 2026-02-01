@@ -1,0 +1,52 @@
+# Gitea Act Runner Configuration for CueMarshal Platform
+
+# Log configuration
+log:
+  level: info
+
+# Runner configuration
+runner:
+  # File to store runner registration data
+  file: /data/.runner
+  # Maximum concurrent jobs (1 = sequential execution)
+  capacity: 1
+  # Timeout for a single job
+  timeout: 2h
+  # Timeout for shutdown
+  shutdown_timeout: 30s
+  # Insecure mode (for self-signed certs in development)
+  insecure: false
+  # Fetch timeout
+  fetch_timeout: 5s
+  # Fetch interval
+  fetch_interval: 2s
+  # Labels (will be set via entrypoint based on RUNNER_LABELS env var)
+  labels: []
+
+# Container configuration (using Docker-in-Docker)
+container:
+  # Network mode
+  network: "bridge"
+  # Enable privileged mode for Docker-in-Docker
+  privileged: false
+  # Options
+  options: ""
+  # Working directory parent
+  workdir_parent: /workspace
+  # Valid volume
+  valid_volumes: []
+  # Docker host
+  docker_host: ""
+  # Force pull
+  force_pull: false
+
+# Host configuration (when not using containers)
+host:
+  workdir_parent: /workspace
+
+# Cache configuration
+cache:
+  enabled: true
+  dir: /data/cache
+  server: ""
+  external_server: ""
