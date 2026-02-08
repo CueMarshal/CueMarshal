@@ -1,0 +1,102 @@
+name: SonarQube Scan
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "30 */8 * * *"   # 30 min before self-improve cycle
+  workflow_dispatch: {}
+
+env:
+  SONAR_URL: ${{ secrets.SONAR_URL }}
+  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+
+jobs:
+  scan:
+    runs-on: [self-hosted, opencode]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # full history for blame data
+
+      - name: Validate Sonar configuration
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "WARNING: SONAR_TOKEN not set — skipping scan"
+            exit 0
+          fi
+          if [ -z "$SONAR_URL" ]; then
+            echo "WARNING: SONAR_URL not set — skipping scan"
+            exit 0
+          fi
+          echo "SONAR_CONFIGURED=true" >> $GITHUB_ENV
+
+      - name: Install dependencies and run tests with coverage
+        if: env.SONAR_CONFIGURED == 'true'
+        run: |
+          echo "=== Installing MCP server dependencies ==="
+          cd services/mcp-servers
+          npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
+          echo ""
+
+          echo "=== Running MCP server tests with coverage ==="
+          npx jest --coverage --coverageDirectory=coverage --passWithNoTests || true
+          cd ../..
+
+          echo ""
+          echo "=== Installing Conductor dependencies ==="
+          cd services/conductor
+          npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
+          echo ""
+
+          echo "=== Running Conductor tests with coverage ==="
+          npx jest --coverage --coverageDirectory=coverage --passWithNoTests || true
+          cd ../..
+
+          echo ""
+          echo "=== Coverage reports ==="
+          for f in services/mcp-servers/coverage/lcov.info services/conductor/coverage/lcov.info; do
+            if [ -f "$f" ]; then
+              echo "  Found: $f ($(wc -l < "$f") lines)"
+            else
+              echo "  Missing: $f"
+            fi
+          done
+
+      - name: Run SonarQube Scanner
+        if: env.SONAR_CONFIGURED == 'true'
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey="${SONAR_PROJECT_KEY:-cuemarshal}" \
+            -Dsonar.host.url="${SONAR_URL}" \
+            -Dsonar.token="${SONAR_TOKEN}" \
+            -Dsonar.sources=. \
+            -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/*.test.*,**/coverage/**,**/__tests__/**" \
+            -Dsonar.tests=. \
+            -Dsonar.test.inclusions="**/*.test.ts,**/*.spec.ts,**/__tests__/**" \
+            -Dsonar.javascript.lcov.reportPaths=services/mcp-servers/coverage/lcov.info,services/conductor/coverage/lcov.info \
+            -Dsonar.typescript.lcov.reportPaths=services/mcp-servers/coverage/lcov.info,services/conductor/coverage/lcov.info \
+            -Dsonar.python.version=3.12 \
+            -Dsonar.typescript.tsconfigPaths=services/mcp-servers/tsconfig.json,services/conductor/tsconfig.json,mobile/tsconfig.json
+
+          echo "SonarQube analysis submitted"
+
+      - name: Wait for analysis processing
+        if: env.SONAR_CONFIGURED == 'true'
+        run: |
+          echo "Waiting for SonarQube to process results..."
+          sleep 15
+
+          # Check quality gate
+          STATUS=$(curl -sf -u "${SONAR_TOKEN}:" \
+            "${SONAR_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY:-cuemarshal}" \
+            | jq -r '.projectStatus.status' 2>/dev/null || echo "UNKNOWN")
+
+          echo "Quality Gate Status: $STATUS"
+
+          if [ "$STATUS" = "ERROR" ]; then
+            echo "::warning::Quality Gate failed — issues will be picked up by self-improvement scanner"
+          fi
