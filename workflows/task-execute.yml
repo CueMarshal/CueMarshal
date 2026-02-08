@@ -1,0 +1,173 @@
+name: Execute Task
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to work on'
+        required: true
+      agent_role:
+        description: 'Agent role (developer, architect, etc.)'
+        required: true
+        default: 'developer'
+      model_tier:
+        description: 'Model tier (tier1, tier2, tier3)'
+        required: true
+        default: 'tier2'
+      branch_name:
+        description: 'Feature branch name'
+        required: true
+
+env:
+  GITEA_URL: ${{ secrets.SCM_URL }}
+  OPENAI_API_KEY: ${{ secrets.GATEWAY_API_KEY }}
+  LOCAL_ENDPOINT: http://127.0.0.1:4101
+
+jobs:
+  execute:
+    runs-on: [self-hosted, opencode]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure agent and credentials
+        run: |
+          ROLE="${{ inputs.agent_role }}"
+          TIER="${{ inputs.model_tier }}"
+          cp /agents/${ROLE}/opencode.json ./opencode.json
+          cp -r /agents/${ROLE}/.opencode ./.opencode 2>/dev/null || true
+          case "${TIER}" in
+            tier1) MODEL_ID="gpt-4o-mini" ;;
+            tier2) MODEL_ID="gpt-4o" ;;
+            tier3) MODEL_ID="gpt-4.1" ;;
+            *) MODEL_ID="gpt-4o" ;;
+          esac
+          echo "MODEL_ID=${MODEL_ID}" >> $GITHUB_ENV
+          
+          case "${ROLE}" in
+            architect)   GITEA_TOKEN="${{ secrets.SCM_TOKEN_ARCHITECT }}" ;;
+            developer)   GITEA_TOKEN="${{ secrets.SCM_TOKEN_DEVELOPER }}" ;;
+            reviewer)    GITEA_TOKEN="${{ secrets.SCM_TOKEN_REVIEWER }}" ;;
+            tester)      GITEA_TOKEN="${{ secrets.SCM_TOKEN_TESTER }}" ;;
+            devops)      GITEA_TOKEN="${{ secrets.SCM_TOKEN_DEVOPS }}" ;;
+            docs)        GITEA_TOKEN="${{ secrets.SCM_TOKEN_DOCS }}" ;;
+            linter)      GITEA_TOKEN="${{ secrets.SCM_TOKEN_LINTER }}" ;;
+            *)           GITEA_TOKEN="${{ secrets.SCM_TOKEN }}" ;;
+          esac
+          
+          if [ -z "${GITEA_TOKEN}" ]; then
+            GITEA_TOKEN="${{ secrets.SCM_TOKEN }}"
+            echo "WARNING: Role-specific token not found, using legacy SCM_TOKEN"
+          fi
+          echo "GITEA_TOKEN=${GITEA_TOKEN}" >> $GITHUB_ENV
+          
+          if command -v jq &>/dev/null && [ -f opencode.json ]; then
+            jq --arg token "$GITEA_TOKEN" \
+              '.mcp.gitea.environment.GITEA_TOKEN = $token // .mcp.gitea.env.GITEA_TOKEN = $token' \
+              opencode.json > opencode.tmp && mv opencode.tmp opencode.json
+          fi
+
+      - name: Git config
+        run: |
+          ROLE="${{ inputs.agent_role }}"
+          case "${ROLE}" in
+            architect)   git config user.name "agent-architect"; git config user.email "architect@cuemarshal.local" ;;
+            developer)   git config user.name "agent-developer"; git config user.email "developer@cuemarshal.local" ;;
+            reviewer)    git config user.name "agent-reviewer"; git config user.email "reviewer@cuemarshal.local" ;;
+            tester)      git config user.name "agent-tester"; git config user.email "tester@cuemarshal.local" ;;
+            devops)      git config user.name "agent-devops"; git config user.email "devops@cuemarshal.local" ;;
+            docs)        git config user.name "agent-docs"; git config user.email "docs@cuemarshal.local" ;;
+            linter)      git config user.name "agent-linter"; git config user.email "linter@cuemarshal.local" ;;
+            *)           git config user.name "cuemarshal-bot"; git config user.email "bot@cuemarshal.local" ;;
+          esac
+
+      - name: Get task
+        id: task
+        run: |
+          ISSUE_NUM="${{ inputs.issue_number }}"
+          ISSUE=$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" \
+            "${GITEA_URL}/api/v1/repos/${{ github.repository }}/issues/${ISSUE_NUM}")
+          echo "title=$(echo "$ISSUE" | jq -r '.title')" >> $GITHUB_OUTPUT
+          echo "$ISSUE" | jq -r '.body // ""' > /tmp/issue_body.txt
+
+      - name: Execute
+        run: |
+          BODY=$(cat /tmp/issue_body.txt)
+          opencode run "Work on issue #${{ inputs.issue_number }}: ${{ steps.task.outputs.title }}. ${BODY}" --model "litellm/${MODEL_ID}"
+
+      - name: Lint and refine
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            if [ -f /agents/linter/opencode.json ]; then
+              cp /agents/linter/opencode.json ./opencode.json
+              opencode run "Check the uncommitted changes for syntax errors, missing imports, lint violations, and type errors. Fix them automatically. Do NOT create a PR." --model "litellm/gpt-4o-mini"
+            fi
+            if [ -n "$(git status --porcelain)" ]; then
+              git add -A
+            fi
+          fi
+
+      - name: Push
+        run: |
+          BRANCH="${{ inputs.branch_name }}"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "feat(#${{ inputs.issue_number }}): ${{ steps.task.outputs.title }}" || true
+            git push origin "${BRANCH}"
+          fi
+
+      - name: Create Pull Request
+        if: success()
+        id: pr
+        run: |
+          BRANCH="${{ inputs.branch_name }}"
+          ISSUE_NUM="${{ inputs.issue_number }}"
+          TITLE="${{ steps.task.outputs.title }}"
+          ROLE="${{ inputs.agent_role }}"
+
+          PR_EXISTS=$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" \
+            "${GITEA_URL}/api/v1/repos/${{ github.repository }}/pulls?state=open&head=${BRANCH}" | \
+            grep -c '"number"' || true)
+
+          if [ "${PR_EXISTS}" = "0" ]; then
+            PR_RESPONSE=$(curl -sf -X POST \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              -H "Content-Type: application/json" \
+              "${GITEA_URL}/api/v1/repos/${{ github.repository }}/pulls" \
+              -d "{
+                \"title\": \"feat(#${ISSUE_NUM}): ${TITLE}\",
+                \"body\": \"Resolves #${ISSUE_NUM}\n\nAutomated PR created by ${ROLE} agent.\",
+                \"head\": \"${BRANCH}\",
+                \"base\": \"main\"
+              }")
+            PR_NUM=$(echo "$PR_RESPONSE" | jq -r '.number')
+            echo "pr_number=${PR_NUM}" >> $GITHUB_OUTPUT
+            echo "PR #${PR_NUM} created"
+          else
+            PR_NUM=$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" \
+              "${GITEA_URL}/api/v1/repos/${{ github.repository }}/pulls?state=open&head=${BRANCH}" | jq -r '.[0].number')
+            echo "pr_number=${PR_NUM}" >> $GITHUB_OUTPUT
+            echo "PR #${PR_NUM} already exists for branch ${BRANCH}"
+          fi
+
+      - name: Trigger code review
+        if: success()
+        run: |
+          BRANCH="${{ inputs.branch_name }}"
+          ISSUE_NUM="${{ inputs.issue_number }}"
+          TITLE="${{ steps.task.outputs.title }}"
+          PR_NUM="${{ steps.pr.outputs.pr_number }}"
+
+          curl -sf -X POST \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${GITEA_URL}/api/v1/repos/${{ github.repository }}/actions/workflows/code-review.yml/dispatches" \
+            -d "{
+              \"ref\": \"${BRANCH}\",
+              \"inputs\": {
+                \"pr_number\": \"${PR_NUM}\",
+                \"issue_number\": \"${ISSUE_NUM}\",
+                \"pr_title\": \"feat(#${ISSUE_NUM}): ${TITLE}\"
+              }
+            }"
+          echo "Code review dispatched for PR #${PR_NUM} via workflow_dispatch"

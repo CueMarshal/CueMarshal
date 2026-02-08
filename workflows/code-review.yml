@@ -1,0 +1,83 @@
+name: Code Review
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull request number to review'
+        required: true
+      issue_number:
+        description: 'Related issue number'
+        required: false
+        default: '0'
+      pr_title:
+        description: 'Pull request title'
+        required: false
+        default: ''
+
+env:
+  GITEA_URL: ${{ secrets.SCM_URL }}
+  OPENAI_API_KEY: ${{ secrets.GATEWAY_API_KEY }}
+
+jobs:
+  review:
+    runs-on: [self-hosted, opencode]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure reviewer identity and credentials
+        run: |
+          git config user.name "agent-reviewer"
+          git config user.email "reviewer@cuemarshal.local"
+          GITEA_TOKEN="${{ secrets.SCM_TOKEN_REVIEWER }}"
+          if [ -z "${GITEA_TOKEN}" ]; then
+            GITEA_TOKEN="${{ secrets.SCM_TOKEN }}"
+            echo "WARNING: SCM_TOKEN_REVIEWER not found, using legacy SCM_TOKEN"
+          fi
+          echo "GITEA_TOKEN=${GITEA_TOKEN}" >> $GITHUB_ENV
+
+      - name: Configure reviewer
+        run: |
+          cp /agents/reviewer/opencode.json ./opencode.json
+          cp -r /agents/reviewer/.opencode ./.opencode 2>/dev/null || true
+          echo "MODEL_ID=gpt-4o" >> $GITHUB_ENV
+          
+          if command -v jq &>/dev/null && [ -f opencode.json ]; then
+            jq --arg token "$GITEA_TOKEN" \
+              '.mcp.gitea.environment.GITEA_TOKEN = $token // .mcp.gitea.env.GITEA_TOKEN = $token' \
+              opencode.json > opencode.tmp && mv opencode.tmp opencode.json
+          fi
+
+      - name: Get PR diff
+        run: |
+          PR_NUM="${{ inputs.pr_number }}"
+          if [ -z "$PR_NUM" ]; then
+            echo "No PR number provided, skipping review"
+            exit 1
+          fi
+          curl -sf -H "Authorization: token ${GITEA_TOKEN}" \
+            "${GITEA_URL}/api/v1/repos/${{ github.repository }}/pulls/${PR_NUM}.diff" > /tmp/diff.txt
+
+      - name: Review
+        run: |
+          PR_NUM="${{ inputs.pr_number }}"
+          ISSUE_NUM="${{ inputs.issue_number }}"
+          PR_TITLE="${{ inputs.pr_title }}"
+          DIFF=$(cat /tmp/diff.txt | head -500)
+
+          ISSUE_REF=""
+          if [ "${ISSUE_NUM}" != "0" ] && [ -n "${ISSUE_NUM}" ]; then
+            ISSUE_REF=" for issue #${ISSUE_NUM}"
+          fi
+
+          cat > /tmp/review_prompt.txt <<PROMPT_EOF
+          Review PR #${PR_NUM}${ISSUE_REF}. Title: ${PR_TITLE}.
+
+          Here is the diff to review:
+          ${DIFF}
+
+          Review the code for correctness, security, and style. Use the gitea_create_review MCP tool to submit your review. Approve if changes look good, or request changes with specific feedback.
+          PROMPT_EOF
+
+          opencode run "$(cat /tmp/review_prompt.txt)" --model "litellm/${MODEL_ID}"
