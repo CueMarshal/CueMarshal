@@ -1,0 +1,66 @@
+{
+  "uid": "cuemarshal-log-signal",
+  "title": "Log Signal",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Error Rate by Container (15m)",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (container) (count_over_time({job=\"docker\"} |~ \"(?i)error|exception|traceback|failed|critical\" [15m]))",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "type": "logs",
+      "title": "Conductor Errors",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{container=~\".*conductor.*\"} |~ \"(?i)error|exception|traceback|failed|critical\"",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 10, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "id": 3,
+      "type": "logs",
+      "title": "Gateway Errors",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{container=~\".*gateway.*\"} |~ \"(?i)error|exception|traceback|failed|critical\"",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 10, "w": 12, "x": 12, "y": 8}
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Runner Errors",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{container=~\".*runner-.*\"} |~ \"(?i)error|exception|traceback|failed|critical\"",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 18}
+    }
+  ]
+}

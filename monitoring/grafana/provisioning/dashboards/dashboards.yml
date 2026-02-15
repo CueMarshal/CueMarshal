@@ -1,0 +1,19 @@
+apiVersion: 1
+
+providers:
+  - name: "CueMarshal Operations"
+    orgId: 1
+    folder: "Operations"
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /etc/grafana/provisioning/dashboards/ops
+  - name: "CueMarshal Logs"
+    orgId: 1
+    folder: "Logs"
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /etc/grafana/provisioning/dashboards/logs
