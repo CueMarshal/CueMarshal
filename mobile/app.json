@@ -1,0 +1,63 @@
+{
+  "expo": {
+    "name": "CueMarshal",
+    "slug": "cuemarshal",
+    "version": "1.0.0",
+    "scheme": "cuemarshal",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff",
+      "dark": {
+        "image": "./assets/splash-dark.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#1A1A36"
+      }
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cuemarshal.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.cuemarshal.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "2.0.21"
+          }
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "baseUrl": "http://localhost:8180",
+      "oauth2ClientId": "33d32317-2765-4388-b5eb-81e909bff194",
+      "oauth2RedirectUri": "cuemarshal://oauth",
+      "router": {},
+      "eas": {
+        "projectId": "42f360a9-547c-45b0-b870-b229da756318"
+      }
+    }
+  }
+}
