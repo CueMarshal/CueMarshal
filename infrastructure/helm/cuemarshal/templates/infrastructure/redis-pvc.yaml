@@ -1,0 +1,18 @@
+{{- if .Values.redis.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-redis
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: redis
+spec:
+  accessModes:
+  - ReadWriteOnce
+  {{- if .Values.redis.persistence.storageClass }}
+  storageClassName: {{ .Values.redis.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.redis.persistence.size }}
+{{- end }}

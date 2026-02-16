@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-postgres
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: postgres
+spec:
+  serviceName: {{ include "cuemarshal.fullname" . }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: postgres
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: {{ .Values.postgres.image }}
+        env:
+        - name: POSTGRES_USER
+          value: {{ .Values.postgres.user | default "cuemarshal" | quote }}
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: postgres-password
+        - name: POSTGRES_DB
+          value: {{ .Values.postgres.database | default "cuemarshal" | quote }}
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        - name: init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U {{ .Values.postgres.user | default "cuemarshal" }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U {{ .Values.postgres.user | default "cuemarshal" }}
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+        resources:
+          {{- toYaml .Values.postgres.resources | nindent 10 }}
+      volumes:
+      - name: init-scripts
+        configMap:
+          name: {{ include "cuemarshal.fullname" . }}-postgres-init
+      {{- if not .Values.postgres.persistence.enabled }}
+      - name: data
+        emptyDir: {}
+      {{- end }}
+  {{- if .Values.postgres.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.postgres.persistence.storageClass }}
+      storageClassName: {{ .Values.postgres.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.postgres.persistence.size }}
+  {{- end }}

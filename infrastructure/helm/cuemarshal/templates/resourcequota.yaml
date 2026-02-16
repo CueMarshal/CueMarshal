@@ -1,0 +1,16 @@
+{{- if .Values.resourceQuota.enabled }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-quota
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+spec:
+  hard:
+    requests.cpu: {{ .Values.resourceQuota.limits.cpu | quote }}
+    requests.memory: {{ .Values.resourceQuota.limits.memory | quote }}
+    limits.cpu: {{ .Values.resourceQuota.limits.cpu | quote }}
+    limits.memory: {{ .Values.resourceQuota.limits.memory | quote }}
+    persistentvolumeclaims: {{ .Values.resourceQuota.limits.persistentvolumeclaims | quote }}
+    pods: {{ .Values.resourceQuota.limits.pods | quote }}
+{{- end }}

@@ -1,0 +1,271 @@
+# Default values for CueMarshal workspace
+# Override these values during installation via --set or -f custom-values.yaml
+
+# Workspace identity
+workspace:
+  slug: ""  # REQUIRED: Unique workspace identifier (becomes namespace suffix and subdomain)
+  domain: "cuemarshal.dev"  # Base domain for ingress
+
+# Container images
+image:
+  registry: ""  # REQUIRED: ACR registry URL (e.g., myregistry.azurecr.io)
+  tag: ""  # Image tag (defaults to Chart.appVersion if empty)
+  pullPolicy: IfNotPresent
+
+# LLM Provider API Keys
+# At least one provider is required
+llm:
+  groqApiKey: ""
+  geminiApiKey: ""
+  azureAiApiKey: ""
+  azureAiApiBase: ""
+
+# Google OAuth SSO (optional)
+# If configured, enables unified SSO across Gitea, Grafana, and SonarQube
+auth:
+  google:
+    clientId: ""
+    clientSecret: ""
+
+# Auto-generated secrets (provided by management plane or install.sh)
+secrets:
+  postgresPassword: ""  # REQUIRED
+  redisPassword: ""  # REQUIRED
+  litellmMasterKey: ""  # REQUIRED
+  webhookSecret: ""  # REQUIRED
+  conductorSecret: ""  # REQUIRED
+  giteaAdminPassword: ""  # REQUIRED
+
+# Budget and model configuration
+budget:
+  totalMonthlyUsd: 100
+  selfImprovePct: 10
+
+models:
+  chatModel: "tier2"
+  decomposeModel: "tier2"
+  planningModel: "gpt-4o"
+  tier1Threshold: 0.30
+  tier3Threshold: 0.70
+
+# Retry and escalation
+retry:
+  maxTotal: 6
+  maxTier1: 2
+  maxTier2: 2
+  maxTier3: 1
+  backoffBaseMs: 5000
+  backoffMaxMs: 60000
+  cooldownMs: 10000
+
+# Self-improvement configuration
+selfImprove:
+  maxPerCycle: 3
+  cooldownHours: 4
+  protectedPaths: "conductor/,gateway/,mcp-servers/,infrastructure/"
+  failureThreshold: 3
+  failureWindowHours: 24
+  testMode: false
+
+# PostgreSQL
+postgres:
+  image: postgres:18-alpine
+  user: "cuemarshal"
+  database: "cuemarshal"
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2"
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""  # Use cluster default
+
+# Redis
+redis:
+  image: redis:8-alpine
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "1"
+  persistence:
+    enabled: true
+    size: 1Gi
+
+# Gitea
+gitea:
+  image: gitea/gitea:1.25
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2"
+  persistence:
+    enabled: true
+    size: 20Gi
+
+# LiteLLM Gateway
+gateway:
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1"
+    limits:
+      memory: "4Gi"
+      cpu: "2"
+
+# Conductor
+conductor:
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "1"
+    limits:
+      memory: "2Gi"
+      cpu: "2"
+
+# MCP Servers
+mcp:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "500m"
+    limits:
+      memory: "512Mi"
+      cpu: "1"
+
+# Gitea Act Runners
+runner:
+  replicas: 2
+  dind:
+    enabled: true  # Docker-in-Docker sidecar (required for K8s)
+    image: docker:28-dind
+  resources:
+    requests:
+      memory: "4Gi"
+      cpu: "2"
+    limits:
+      memory: "8Gi"
+      cpu: "4"
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+
+# Monitoring
+monitoring:
+  enabled: true
+  
+  prometheus:
+    image: prom/prometheus:v3.9.1
+    retention: "15d"
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"
+    persistence:
+      enabled: true
+      size: 5Gi
+  
+  grafana:
+    image: grafana/grafana:10.4.3
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "250m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"
+    persistence:
+      enabled: true
+      size: 1Gi
+  
+  loki:
+    image: grafana/loki:2.9.8
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "250m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"
+    persistence:
+      enabled: true
+      size: 5Gi
+  
+  promtail:
+    image: grafana/promtail:3.0.0
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "128Mi"
+        cpu: "200m"
+
+# SonarQube
+sonarqube:
+  enabled: true
+  image: sonarqube:26.2.0.119303-community
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  persistence:
+    enabled: true
+    dataSize: 5Gi
+    extensionsSize: 1Gi
+    logsSize: 1Gi
+  
+  # OAuth2 Proxy for Google SSO
+  oauthProxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+    enabled: true  # Auto-enabled when auth.google.clientId is set
+
+# Nginx reverse proxy
+nginx:
+  image: nginx:alpine
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# Ingress
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  tls:
+    enabled: true
+
+# NetworkPolicy
+networkPolicy:
+  enabled: true
+  denyOtherNamespaces: true  # Block cross-namespace traffic
+
+# ResourceQuota
+resourceQuota:
+  enabled: true
+  limits:
+    cpu: "20"
+    memory: "32Gi"
+    persistentvolumeclaims: "20"
+    pods: "50"

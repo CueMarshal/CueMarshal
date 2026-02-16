@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-mcp-gitea
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: mcp-gitea
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: mcp-gitea
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: mcp-gitea
+    spec:
+      containers:
+      - name: mcp-gitea
+        image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "mcp-gitea") }}
+        env:
+        - name: MCP_TRANSPORT
+          value: "http"
+        - name: PORT
+          value: "80"
+        - name: GITEA_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-gitea:3000"
+        - name: GITEA_TOKEN
+          value: ""  # Populated by init-gitea
+        ports:
+        - name: http
+          containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          {{- toYaml .Values.mcp.resources | nindent 10 }}

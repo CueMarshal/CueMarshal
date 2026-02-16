@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-runner
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: runner
+spec:
+  serviceName: {{ include "cuemarshal.fullname" . }}-runner
+  replicas: {{ .Values.runner.replicas }}
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: runner
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: runner
+    spec:
+      serviceAccountName: {{ include "cuemarshal.fullname" . }}-runner
+      containers:
+      - name: runner
+        image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "runner") }}
+        env:
+        - name: GITEA_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-gitea:3000"
+        - name: GITEA_TOKEN
+          value: ""  # Populated by init-gitea
+        - name: GITEA_RUNNER_REGISTRATION_TOKEN
+          value: ""  # Populated by init-gitea
+        - name: RUNNER_NAME
+          value: "$(POD_NAME)"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: RUNNER_LABELS
+          value: "self-hosted,opencode"
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: litellm-master-key
+        - name: CONDUCTOR_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-conductor"
+        - name: CONDUCTOR_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: conductor-secret
+        - name: DATABASE_URL
+          value: "postgresql://{{ .Values.postgres.user | default "cuemarshal" }}:$(POSTGRES_PASSWORD)@{{ include "cuemarshal.fullname" . }}-postgres:5432/{{ .Values.postgres.database | default "cuemarshal" }}"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: postgres-password
+        {{- if .Values.runner.dind.enabled }}
+        - name: DOCKER_HOST
+          value: "tcp://localhost:2376"
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+        {{- end }}
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        resources:
+          {{- toYaml .Values.runner.resources | nindent 10 }}
+      {{- if .Values.runner.dind.enabled }}
+      - name: dind
+        image: {{ .Values.runner.dind.image }}
+        env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: dind-storage
+          mountPath: /var/lib/docker
+      {{- end }}
+      {{- if not .Values.runner.persistence.enabled }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- if .Values.runner.dind.enabled }}
+      - name: dind-storage
+        emptyDir: {}
+      {{- end }}
+      {{- end }}
+  {{- if .Values.runner.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.runner.persistence.storageClass }}
+      storageClassName: {{ .Values.runner.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.runner.persistence.size }}
+  {{- if .Values.runner.dind.enabled }}
+  - metadata:
+      name: dind-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.runner.persistence.storageClass }}
+      storageClassName: {{ .Values.runner.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: 10Gi
+  {{- end }}
+  {{- end }}

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-redis
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: redis
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+    protocol: TCP
+  selector:
+    {{- include "cuemarshal.selectorLabels" . | nindent 4 }}
+    component: redis

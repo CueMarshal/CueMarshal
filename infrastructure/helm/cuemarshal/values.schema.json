@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["workspace", "image", "secrets"],
+  "properties": {
+    "workspace": {
+      "type": "object",
+      "required": ["slug"],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "minLength": 3,
+          "maxLength": 63,
+          "description": "Unique workspace identifier (becomes namespace suffix and subdomain)"
+        },
+        "domain": {
+          "type": "string",
+          "default": "cuemarshal.dev"
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "required": ["registry"],
+      "properties": {
+        "registry": {
+          "type": "string",
+          "description": "Container registry URL (e.g., myregistry.azurecr.io)"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Image tag (defaults to Chart appVersion)"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "default": "IfNotPresent"
+        }
+      }
+    },
+    "llm": {
+      "type": "object",
+      "properties": {
+        "groqApiKey": { "type": "string" },
+        "geminiApiKey": { "type": "string" },
+        "azureAiApiKey": { "type": "string" },
+        "azureAiApiBase": { "type": "string" }
+      },
+      "anyOf": [
+        { "required": ["groqApiKey"] },
+        { "required": ["geminiApiKey"] },
+        { "required": ["azureAiApiKey", "azureAiApiBase"] }
+      ]
+    },
+    "auth": {
+      "type": "object",
+      "properties": {
+        "google": {
+          "type": "object",
+          "properties": {
+            "clientId": { "type": "string" },
+            "clientSecret": { "type": "string" }
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "required": [
+        "postgresPassword",
+        "redisPassword",
+        "litellmMasterKey",
+        "webhookSecret",
+        "conductorSecret",
+        "giteaAdminPassword"
+      ],
+      "properties": {
+        "postgresPassword": { "type": "string", "minLength": 16 },
+        "redisPassword": { "type": "string", "minLength": 16 },
+        "litellmMasterKey": { "type": "string", "minLength": 32 },
+        "webhookSecret": { "type": "string", "minLength": 32 },
+        "conductorSecret": { "type": "string", "minLength": 32 },
+        "giteaAdminPassword": { "type": "string", "minLength": 16 }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "properties": {
+        "totalMonthlyUsd": { "type": "number", "minimum": 0 },
+        "selfImprovePct": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "dind": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }
+}

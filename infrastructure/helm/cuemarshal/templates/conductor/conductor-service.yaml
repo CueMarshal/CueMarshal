@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-conductor
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: conductor
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  selector:
+    {{- include "cuemarshal.selectorLabels" . | nindent 4 }}
+    component: conductor

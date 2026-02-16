@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-init-script
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: init
+data:
+  init-gitea.sh: |
+{{ .Files.Get "../../infrastructure/gitea/init-gitea.sh" | nindent 4 }}

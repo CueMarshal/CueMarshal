@@ -1,0 +1,52 @@
+{{- if .Values.sonarqube.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-mcp-sonar
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: mcp-sonar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: mcp-sonar
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: mcp-sonar
+    spec:
+      containers:
+      - name: mcp-sonar
+        image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "mcp-sonar") }}
+        env:
+        - name: MCP_TRANSPORT
+          value: "http"
+        - name: PORT
+          value: "80"
+        - name: SONAR_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-sonarqube:9000"
+        - name: SONAR_TOKEN
+          value: ""  # Populated by init
+        - name: SONAR_PROJECT_KEY
+          value: {{ .Values.workspace.slug | quote }}
+        ports:
+        - name: http
+          containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          {{- toYaml .Values.mcp.resources | nindent 10 }}
+{{- end }}

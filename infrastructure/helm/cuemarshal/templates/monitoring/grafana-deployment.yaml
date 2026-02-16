@@ -1,0 +1,71 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-grafana
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: grafana
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: {{ .Values.monitoring.grafana.image }}
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin"
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: "false"
+        - name: GF_SERVER_ROOT_URL
+          value: "https://{{ include "cuemarshal.fqdn" . }}/grafana/"
+        - name: GF_SERVER_SERVE_FROM_SUB_PATH
+          value: "true"
+        {{- if .Values.auth.google.clientId }}
+        - name: GF_AUTH_GOOGLE_ENABLED
+          value: "true"
+        - name: GF_AUTH_GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: google-client-id
+        - name: GF_AUTH_GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: google-client-secret
+        - name: GF_AUTH_GOOGLE_SCOPES
+          value: "openid email profile"
+        - name: GF_AUTH_GOOGLE_AUTH_URL
+          value: "https://accounts.google.com/o/oauth2/v2/auth"
+        - name: GF_AUTH_GOOGLE_TOKEN_URL
+          value: "https://oauth2.googleapis.com/token"
+        - name: GF_AUTH_GOOGLE_ALLOW_SIGN_UP
+          value: "true"
+        {{- end }}
+        ports:
+        - name: http
+          containerPort: 3000
+        resources:
+          {{- toYaml .Values.monitoring.grafana.resources | nindent 10 }}
+        {{- if .Values.monitoring.grafana.persistence.enabled }}
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/grafana
+        {{- end }}
+      {{- if .Values.monitoring.grafana.persistence.enabled }}
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ include "cuemarshal.fullname" . }}-grafana
+      {{- end }}
+{{- end }}

@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-gitea-config
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: gitea
+data:
+  app.ini: |
+    WORK_PATH = /data/gitea
+    
+    [server]
+    DOMAIN = {{ include "cuemarshal.fqdn" . }}
+    ROOT_URL = https://{{ include "cuemarshal.fqdn" . }}/
+    HTTP_PORT = 3000
+    SSH_DOMAIN = {{ include "cuemarshal.fqdn" . }}
+    SSH_PORT = 22
+    SSH_LISTEN_PORT = 22
+    LFS_START_SERVER = true
+    OFFLINE_MODE = false
+    APP_DATA_PATH = /data/gitea
+    
+    [database]
+    DB_TYPE = postgres
+    HOST = {{ include "cuemarshal.fullname" . }}-postgres:5432
+    NAME = gitea
+    USER = {{ .Values.postgres.user | default "cuemarshal" }}
+    PASSWD = POSTGRES_PASSWORD_PLACEHOLDER
+    SSL_MODE = disable
+    
+    [repository]
+    ROOT = /data/git/repositories
+    DEFAULT_BRANCH = main
+    ENABLE_PUSH_CREATE_USER = true
+    ENABLE_PUSH_CREATE_ORG = true
+    
+    [security]
+    INSTALL_LOCK = true
+    
+    [service]
+    DISABLE_REGISTRATION = true
+    REQUIRE_SIGNIN_VIEW = false
+    ENABLE_CAPTCHA = false
+    DEFAULT_ALLOW_CREATE_ORGANIZATION = true
+    
+    [actions]
+    ENABLED = true
+    DEFAULT_ACTIONS_URL = github
+    
+    [webhook]
+    ALLOWED_HOST_LIST = *
+    SKIP_TLS_VERIFY = true
+    
+    [log]
+    MODE = console
+    LEVEL = Info

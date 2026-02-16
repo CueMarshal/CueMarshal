@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-mcp-gitea
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: mcp-gitea
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  selector:
+    {{- include "cuemarshal.selectorLabels" . | nindent 4 }}
+    component: mcp-gitea
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-mcp-conductor
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: mcp-conductor
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  selector:
+    {{- include "cuemarshal.selectorLabels" . | nindent 4 }}
+    component: mcp-conductor
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-mcp-system
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: mcp-system
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  selector:
+    {{- include "cuemarshal.selectorLabels" . | nindent 4 }}
+    component: mcp-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-mcp-vector
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: mcp-vector
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  selector:
+    {{- include "cuemarshal.selectorLabels" . | nindent 4 }}
+    component: mcp-vector
+---
+{{- if .Values.sonarqube.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-mcp-sonar
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: mcp-sonar
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  selector:
+    {{- include "cuemarshal.selectorLabels" . | nindent 4 }}
+    component: mcp-sonar
+{{- end }}

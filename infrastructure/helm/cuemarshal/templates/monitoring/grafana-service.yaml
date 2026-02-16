@@ -1,0 +1,18 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-grafana
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: grafana
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 3000
+    targetPort: http
+  selector:
+    {{- include "cuemarshal.selectorLabels" . | nindent 4 }}
+    component: grafana
+{{- end }}

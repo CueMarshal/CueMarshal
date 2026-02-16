@@ -1,0 +1,15 @@
+apiVersion: v2
+name: cuemarshal
+description: AI-powered software development workspace
+type: application
+version: 0.0.1
+appVersion: "0.0.1"
+keywords:
+  - ai
+  - development
+  - gitea
+  - agents
+  - automation
+maintainers:
+  - name: CueMarshal Team
+    email: dev@cuemarshal.dev

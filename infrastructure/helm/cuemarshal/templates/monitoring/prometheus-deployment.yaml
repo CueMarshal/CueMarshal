@@ -1,0 +1,44 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-prometheus
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: prometheus
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: {{ .Values.monitoring.prometheus.image }}
+        args:
+        - --config.file=/etc/prometheus/prometheus.yml
+        - --storage.tsdb.path=/prometheus
+        - --storage.tsdb.retention.time={{ .Values.monitoring.prometheus.retention }}
+        ports:
+        - name: http
+          containerPort: 9090
+        resources:
+          {{- toYaml .Values.monitoring.prometheus.resources | nindent 10 }}
+        {{- if .Values.monitoring.prometheus.persistence.enabled }}
+        volumeMounts:
+        - name: data
+          mountPath: /prometheus
+        {{- end }}
+      {{- if .Values.monitoring.prometheus.persistence.enabled }}
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ include "cuemarshal.fullname" . }}-prometheus
+      {{- end }}
+{{- end }}

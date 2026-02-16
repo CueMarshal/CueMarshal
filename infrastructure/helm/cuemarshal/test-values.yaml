@@ -1,0 +1,86 @@
+# Test values for deploying CueMarshal to minikube
+
+workspace:
+  slug: "test"
+  domain: "local"
+
+image:
+  registry: "docker.io/cuemarshal"  # Will use local images for minikube
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+llm:
+  groqApiKey: "test-key-will-fail-but-ok-for-deployment-test"
+
+secrets:
+  postgresPassword: "test-postgres-pwd"
+  redisPassword: "test-redis-password"
+  litellmMasterKey: "test-litellm-master-key-32chars!!"
+  webhookSecret: "test-webhook-secret-32characters!"
+  conductorSecret: "test-conductor-secret-32characte!"
+  giteaAdminPassword: "test-gitea-admin-pwd"
+
+# Minimal resources for minikube
+postgres:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  persistence:
+    enabled: false  # Use emptyDir for testing
+
+redis:
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  persistence:
+    enabled: false
+
+gitea:
+  persistence:
+    enabled: false
+
+runner:
+  replicas: 1  # Single runner for testing
+  dind:
+    enabled: true
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  persistence:
+    enabled: false
+
+# Disable monitoring for minimal testing
+monitoring:
+  enabled: false
+
+# Disable SonarQube for minimal testing
+sonarqube:
+  enabled: false
+
+# Simple ingress without TLS for local testing
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations: {}
+  tls:
+    enabled: false
+
+# Disable network policy for easier local testing
+networkPolicy:
+  enabled: false
+
+# No resource quota for local testing
+resourceQuota:
+  enabled: false

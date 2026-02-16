@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-gateway
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: gateway
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: gateway
+    spec:
+      containers:
+      - name: gateway
+        image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "gateway") }}
+        env:
+        {{- if .Values.llm.groqApiKey }}
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: groq-api-key
+        {{- end }}
+        {{- if .Values.llm.geminiApiKey }}
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: gemini-api-key
+        {{- end }}
+        {{- if .Values.llm.azureAiApiKey }}
+        - name: AZURE_AI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: azure-ai-api-key
+        - name: AZURE_AI_API_BASE
+          value: {{ .Values.llm.azureAiApiBase | quote }}
+        {{- end }}
+        - name: LITELLM_MASTER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: litellm-master-key
+        - name: DATABASE_URL
+          value: "postgresql://{{ .Values.postgres.user | default "cuemarshal" }}:$(POSTGRES_PASSWORD)@{{ include "cuemarshal.fullname" . }}-postgres:5432/litellm"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: postgres-password
+        - name: REDIS_HOST
+          value: {{ include "cuemarshal.fullname" . }}-redis
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: redis-password
+        ports:
+        - name: http
+          containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /health/liveliness
+            port: http
+          initialDelaySeconds: 120
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 10
+        readinessProbe:
+          httpGet:
+            path: /health/readiness
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+        resources:
+          {{- toYaml .Values.gateway.resources | nindent 10 }}

@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-conductor
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: conductor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: conductor
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: conductor
+    spec:
+      containers:
+      - name: conductor
+        image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "conductor") }}
+        env:
+        - name: PORT
+          value: "80"
+        - name: DATABASE_URL
+          value: "postgresql://{{ .Values.postgres.user | default "cuemarshal" }}:$(POSTGRES_PASSWORD)@{{ include "cuemarshal.fullname" . }}-postgres:5432/{{ .Values.postgres.database | default "cuemarshal" }}"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: postgres-password
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@{{ include "cuemarshal.fullname" . }}-redis:6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: redis-password
+        - name: GITEA_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-gitea:3000"
+        - name: GITEA_TOKEN
+          value: ""  # Populated by init-gitea job
+        - name: GATEWAY_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-gateway"
+        - name: GATEWAY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: litellm-master-key
+        - name: WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: webhook-secret
+        - name: CONDUCTOR_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: conductor-secret
+        - name: CONDUCTOR_ORG
+          value: {{ .Values.workspace.slug | quote }}
+        - name: CONDUCTOR_REPO
+          value: {{ .Values.workspace.slug | quote }}
+        - name: MCP_GITEA_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-mcp-gitea"
+        - name: MCP_CONDUCTOR_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-mcp-conductor"
+        - name: MCP_SYSTEM_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-mcp-system"
+        - name: MCP_VECTOR_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-mcp-vector"
+        - name: MCP_SONAR_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-mcp-sonar"
+        - name: CHAT_MODEL
+          value: {{ .Values.models.chatModel | quote }}
+        - name: DECOMPOSE_MODEL
+          value: {{ .Values.models.decomposeModel | quote }}
+        - name: PLANNING_MODEL
+          value: {{ .Values.models.planningModel | quote }}
+        - name: TOTAL_MONTHLY_BUDGET_USD
+          value: {{ .Values.budget.totalMonthlyUsd | quote }}
+        - name: SELF_IMPROVE_BUDGET_PCT
+          value: {{ .Values.budget.selfImprovePct | quote }}
+        - name: LOG_LEVEL
+          value: "info"
+        - name: NODE_ENV
+          value: "production"
+        ports:
+        - name: http
+          containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+        resources:
+          {{- toYaml .Values.conductor.resources | nindent 10 }}

@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-mcp-vector
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: mcp-vector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: mcp-vector
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: mcp-vector
+    spec:
+      containers:
+      - name: mcp-vector
+        image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "mcp-vector") }}
+        env:
+        - name: MCP_TRANSPORT
+          value: "http"
+        - name: PORT
+          value: "80"
+        - name: DATABASE_URL
+          value: "postgresql://{{ .Values.postgres.user | default "cuemarshal" }}:$(POSTGRES_PASSWORD)@{{ include "cuemarshal.fullname" . }}-postgres:5432/{{ .Values.postgres.database | default "cuemarshal" }}"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: postgres-password
+        - name: GATEWAY_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-gateway"
+        - name: GATEWAY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: litellm-master-key
+        ports:
+        - name: http
+          containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          {{- toYaml .Values.mcp.resources | nindent 10 }}

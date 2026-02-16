@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-gitea
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: gitea
+spec:
+  serviceName: {{ include "cuemarshal.fullname" . }}-gitea
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: gitea
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: gitea
+    spec:
+      initContainers:
+      - name: init-config
+        image: {{ .Values.gitea.image }}
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          mkdir -p /data/gitea/conf
+          if [ ! -f /data/gitea/conf/app.ini ]; then
+            cp /etc/templates/app.ini /data/gitea/conf/app.ini
+            # Replace password placeholder
+            sed -i "s/POSTGRES_PASSWORD_PLACEHOLDER/$(cat /secrets/postgres-password)/" /data/gitea/conf/app.ini
+            chown -R 1000:1000 /data/gitea/conf
+          fi
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: config-template
+          mountPath: /etc/templates
+        - name: secrets
+          mountPath: /secrets
+      containers:
+      - name: gitea
+        image: {{ .Values.gitea.image }}
+        env:
+        - name: USER_UID
+          value: "1000"
+        - name: USER_GID
+          value: "1000"
+        ports:
+        - name: http
+          containerPort: 3000
+        - name: ssh
+          containerPort: 22
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        livenessProbe:
+          httpGet:
+            path: /api/v1/version
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 10
+        readinessProbe:
+          httpGet:
+            path: /api/v1/version
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        resources:
+          {{- toYaml .Values.gitea.resources | nindent 10 }}
+      volumes:
+      - name: config-template
+        configMap:
+          name: {{ include "cuemarshal.fullname" . }}-gitea-config
+      - name: secrets
+        secret:
+          secretName: {{ include "cuemarshal.fullname" . }}-secrets
+      {{- if not .Values.gitea.persistence.enabled }}
+      - name: data
+        emptyDir: {}
+      {{- end }}
+  {{- if .Values.gitea.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.gitea.persistence.storageClass }}
+      storageClassName: {{ .Values.gitea.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.gitea.persistence.size }}
+  {{- end }}

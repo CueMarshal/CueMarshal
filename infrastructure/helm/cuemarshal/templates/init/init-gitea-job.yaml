@@ -1,0 +1,84 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-init-gitea
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: init
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: init
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+      - name: wait-for-gitea
+        image: curlimages/curl:latest
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          until curl -sf http://{{ include "cuemarshal.fullname" . }}-gitea:3000/api/v1/version; do
+            echo "Waiting for Gitea..."
+            sleep 5
+          done
+          echo "Gitea is ready"
+      containers:
+      - name: init
+        image: {{ .Values.gitea.image }}
+        command: ["/bin/sh", "/scripts/init-gitea.sh"]
+        env:
+        - name: GITEA_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-gitea:3000"
+        - name: GITEA_ADMIN_USER
+          value: "{{ .Values.workspace.slug }}-admin"
+        - name: GITEA_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: gitea-admin-password
+        - name: GITEA_ADMIN_EMAIL
+          value: "admin@{{ .Values.workspace.slug }}.local"
+        - name: CONDUCTOR_ORG
+          value: {{ .Values.workspace.slug | quote }}
+        - name: WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: webhook-secret
+        - name: API_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: conductor-secret
+        {{- if .Values.auth.google.clientId }}
+        - name: GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: google-client-id
+        - name: GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: google-client-secret
+        {{- end }}
+        volumeMounts:
+        - name: init-script
+          mountPath: /scripts
+        - name: tokens
+          mountPath: /tokens
+        - name: gitea-data
+          mountPath: /data
+      volumes:
+      - name: init-script
+        configMap:
+          name: {{ include "cuemarshal.fullname" . }}-init-script
+          defaultMode: 0755
+      - name: tokens
+        emptyDir: {}
+      - name: gitea-data
+        persistentVolumeClaim:
+          claimName: data-{{ include "cuemarshal.fullname" . }}-gitea-0

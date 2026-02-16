@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-postgres-init
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: postgres
+data:
+  01-init.sql: |
+    -- Initialize PostgreSQL databases for CueMarshal platform
+    -- Replaces POSTGRES_USER placeholder with actual user from values
+    
+    CREATE DATABASE gitea OWNER {{ .Values.postgres.user | default "cuemarshal" }};
+    CREATE DATABASE litellm OWNER {{ .Values.postgres.user | default "cuemarshal" }};
+    CREATE DATABASE sonarqube OWNER {{ .Values.postgres.user | default "cuemarshal" }};
+    
+    CREATE SCHEMA IF NOT EXISTS conductor;
+    GRANT ALL PRIVILEGES ON SCHEMA conductor TO {{ .Values.postgres.user | default "cuemarshal" }};
+    GRANT ALL PRIVILEGES ON SCHEMA public TO {{ .Values.postgres.user | default "cuemarshal" }};
+    
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    
+  02-enable-vector.sql: |
+    -- Enable pgvector extension (optional, non-fatal)
+    DO $$
+    BEGIN
+        CREATE EXTENSION IF NOT EXISTS vector;
+        
+        CREATE TABLE IF NOT EXISTS project_embeddings (
+          id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+          project TEXT NOT NULL,
+          content_type TEXT NOT NULL,
+          content_ref TEXT NOT NULL,
+          content_text TEXT NOT NULL,
+          embedding vector(1536),
+          metadata JSONB DEFAULT '{}',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(project, content_type, content_ref)
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_embeddings_project ON project_embeddings(project);
+        CREATE INDEX IF NOT EXISTS idx_embeddings_type ON project_embeddings(content_type);
+        CREATE INDEX IF NOT EXISTS idx_embeddings_vector ON project_embeddings
+          USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+          
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'pgvector not available, skipping vector table setup';
+    END $$;
