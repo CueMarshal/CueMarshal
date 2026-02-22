@@ -41,6 +41,10 @@ describe("getSystemConfig", () => {
       conductorUrl: "http://conductor:3001",
       conductorSecret: "conductor-secret",
       databaseUrl: "postgres://localhost/db",
+      lokiUrl: "http://loki:3100",
+      prometheusUrl: "http://prometheus:9090",
+      grafanaUrl: "http://grafana:3000",
+      grafanaToken: undefined,
     });
   });
 

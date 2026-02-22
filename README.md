@@ -177,6 +177,30 @@ Login to Gitea with credentials from `.env`:
 - **Proxy**: Nginx
 - **Containers**: Docker, Docker Compose
 
+## Contributing
+
+CueMarshal uses its own platform to manage contributions — improvements are
+proposed and executed through Gitea issues and pull requests, often by the
+AI agents themselves.
+
+To contribute:
+
+1. **Fork** the repository and create a feature branch from `main`.
+2. **Open an issue** describing what you plan to change before submitting a PR.
+3. **Follow the Git Flow** used by the platform: one logical change per branch,
+   one PR per issue.
+4. **Run the test suites** before opening a PR:
+   ```bash
+   # MCP servers
+   cd services/mcp-servers && npm test
+   # Conductor
+   cd services/conductor && npm test
+   ```
+5. **Ensure Docker Compose starts cleanly** with `bash install.sh`.
+
+All pull requests are reviewed (and may be reviewed *by*) the CueMarshal
+reviewer agent. Humans have final merge authority.
+
 ## License
 
-Proprietary. All rights reserved.
+MIT License — see [LICENSE](LICENSE) for details.
