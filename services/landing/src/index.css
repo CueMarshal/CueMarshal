@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cuemarshal-navy: #1F2A44;
+  --color-cuemarshal-blue: #00A1F0;
+  --color-cuemarshal-white: #FFFFFF;
+  --color-cuemarshal-grey: #F4F5F7;
+  --color-cuemarshal-charcoal: #333D55;
+  --font-montserrat: "Montserrat", sans-serif;
+  --font-inter: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-cuemarshal-white);
+    color: var(--color-cuemarshal-charcoal);
+  }
+}

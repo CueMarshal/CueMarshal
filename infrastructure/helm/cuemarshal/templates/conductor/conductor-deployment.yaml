@@ -122,5 +122,13 @@ spec:
           initialDelaySeconds: 20
           periodSeconds: 10
           timeoutSeconds: 5
+        volumeMounts:
+        - name: oauth-config
+          mountPath: /tokens
+          readOnly: true
         resources:
           {{- toYaml .Values.conductor.resources | nindent 10 }}
+      volumes:
+      - name: oauth-config
+        configMap:
+          name: {{ include "cuemarshal.fullname" . }}-oauth-config

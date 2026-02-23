@@ -1,0 +1,113 @@
+{{- if .Values.sonarqube.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-sonarqube
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: sonarqube
+spec:
+  serviceName: {{ include "cuemarshal.fullname" . }}-sonarqube
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: sonarqube
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: sonarqube
+    spec:
+      containers:
+      - name: sonarqube
+        image: {{ .Values.sonarqube.image }}
+        env:
+        - name: SONAR_WEB_CONTEXT
+          value: "/sonar"
+        - name: SONAR_JDBC_URL
+          value: "jdbc:postgresql://{{ include "cuemarshal.fullname" . }}-postgres:5432/sonarqube"
+        - name: SONAR_JDBC_USERNAME
+          value: {{ .Values.postgres.user | default "cuemarshal" | quote }}
+        - name: SONAR_JDBC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: postgres-password
+        {{- if .Values.auth.google.clientId }}
+        # Enable SSO header authentication when Google OAuth is configured
+        - name: SONAR_WEB_SSO_ENABLE
+          value: "true"
+        - name: SONAR_WEB_SSO_LOGIN_HEADER
+          value: "X-Forwarded-User"
+        - name: SONAR_WEB_SSO_NAME_HEADER
+          value: "X-Forwarded-User"
+        - name: SONAR_WEB_SSO_EMAIL_HEADER
+          value: "X-Forwarded-Email"
+        - name: SONAR_WEB_SSO_GROUPS_HEADER
+          value: "X-Forwarded-Groups"
+        {{- end }}
+        ports:
+        - name: http
+          containerPort: 9000
+        resources:
+          {{- toYaml .Values.sonarqube.resources | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /sonar/api/system/status
+            port: http
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 10
+        readinessProbe:
+          httpGet:
+            path: /sonar/api/system/status
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        {{- if .Values.sonarqube.persistence.enabled }}
+        volumeMounts:
+        - name: data
+          mountPath: /opt/sonarqube/data
+        - name: extensions
+          mountPath: /opt/sonarqube/extensions
+        - name: logs
+          mountPath: /opt/sonarqube/logs
+        {{- end }}
+  {{- if .Values.sonarqube.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.sonarqube.persistence.storageClass }}
+      storageClassName: {{ .Values.sonarqube.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.sonarqube.persistence.dataSize }}
+  - metadata:
+      name: extensions
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.sonarqube.persistence.storageClass }}
+      storageClassName: {{ .Values.sonarqube.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.sonarqube.persistence.extensionsSize }}
+  - metadata:
+      name: logs
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.sonarqube.persistence.storageClass }}
+      storageClassName: {{ .Values.sonarqube.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.sonarqube.persistence.logsSize }}
+  {{- end }}
+{{- end }}

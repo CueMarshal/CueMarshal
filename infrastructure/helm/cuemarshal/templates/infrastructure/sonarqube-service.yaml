@@ -1,0 +1,19 @@
+{{- if .Values.sonarqube.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-sonarqube
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: sonarqube
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9000
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "cuemarshal.selectorLabels" . | nindent 4 }}
+    component: sonarqube
+{{- end }}

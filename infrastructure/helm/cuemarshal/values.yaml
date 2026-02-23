@@ -132,6 +132,16 @@ conductor:
       memory: "2Gi"
       cpu: "2"
 
+# Landing page
+landing:
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
 # MCP Servers
 mcp:
   resources:
@@ -227,6 +237,7 @@ sonarqube:
       cpu: "1"
   persistence:
     enabled: true
+    storageClass: ""  # Use cluster default
     dataSize: 5Gi
     extensionsSize: 1Gi
     logsSize: 1Gi

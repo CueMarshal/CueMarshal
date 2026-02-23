@@ -27,7 +27,7 @@ spec:
         - name: PORT
           value: "80"
         - name: SONAR_URL
-          value: "http://{{ include "cuemarshal.fullname" . }}-sonarqube:9000"
+          value: "http://{{ include "cuemarshal.fullname" . }}-sonarqube:9000/sonar"
         - name: SONAR_TOKEN
           value: ""  # Populated by init
         - name: SONAR_PROJECT_KEY

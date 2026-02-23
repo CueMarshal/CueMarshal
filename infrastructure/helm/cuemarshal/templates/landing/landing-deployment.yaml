@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-landing
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: landing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: landing
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: landing
+    spec:
+      containers:
+      - name: landing
+        image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "landing") }}
+        ports:
+        - name: http
+          containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+        resources:
+          {{- toYaml .Values.landing.resources | nindent 10 }}

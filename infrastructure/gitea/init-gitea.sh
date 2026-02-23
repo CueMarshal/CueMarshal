@@ -432,14 +432,17 @@ seed_repo_secrets() {
 }
 
 create_oauth2_app() {
-    echo "[14/17] Creating OAuth2 application for mobile app..."
+    echo "[14/17] Creating OAuth2 application for mobile app & web..."
     ADMIN_TOKEN=$(cat "${TOKEN_DIR}/admin_token")
+
+    # Determine the web redirect URI based on GITEA_URL
+    WEB_REDIRECT_URI="${GITEA_URL}/oauth/callback"
 
     # Check if the OAuth2 app already exists
     EXISTING=$(curl -sf \
         -H "Authorization: token ${ADMIN_TOKEN}" \
         "${GITEA_URL}/api/v1/user/applications/oauth2" 2>/dev/null | \
-        sed -n 's/.*"client_id":"\([^"]*\)".*"name":"CueMarshal Mobile App".*/\1/p')
+        sed -n 's/.*"client_id":"\([^"]*\)".*"name":"CueMarshal".*/\1/p')
 
     if [ -n "${EXISTING}" ]; then
         CLIENT_ID="${EXISTING}"
@@ -449,17 +452,20 @@ create_oauth2_app() {
             -H "Authorization: token ${ADMIN_TOKEN}" \
             -H "Content-Type: application/json" \
             "${GITEA_URL}/api/v1/user/applications/oauth2" \
-            -d '{
-                "name": "CueMarshal Mobile App",
-                "redirect_uris": ["cuemarshal://oauth"],
-                "confidential_client": false
-            }' 2>/dev/null)
+            -d "{
+                \"name\": \"CueMarshal\",
+                \"redirect_uris\": [\"cuemarshal://oauth\", \"${WEB_REDIRECT_URI}\"],
+                \"confidential_client\": false
+            }" 2>/dev/null)
 
         CLIENT_ID=$(echo "${OAUTH_RESPONSE}" | sed -n 's/.*"client_id":"\([^"]*\)".*/\1/p')
     fi
 
     if [ -n "${CLIENT_ID}" ]; then
         echo "${CLIENT_ID}" > "${TOKEN_DIR}/oauth2_client_id"
+        echo "  OAuth2 application configured (Mobile + Web)"
+        echo "    - Mobile: cuemarshal://oauth"
+        echo "    - Web: ${WEB_REDIRECT_URI}"
     else
         echo "  WARNING: Could not create OAuth2 application"
     fi

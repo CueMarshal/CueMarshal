@@ -46,6 +46,18 @@ services:
     restart: unless-stopped
 
   # ═══════════════════════════════════════
+  # Landing Page Service
+  # ═══════════════════════════════════════
+  landing:
+    build:
+      context: ./services/landing
+      dockerfile: Dockerfile
+    container_name: cuemarshal-landing
+    networks:
+      - cuemarshal
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════
   # Gitea (Source of Truth)
   # ═══════════════════════════════════════
   gitea:
@@ -632,7 +644,11 @@ services:
     networks:
       - cuemarshal
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9000/sonar/api/system/status | grep -q UP"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:9000/sonar/api/system/status | grep -q UP",
+        ]
       interval: 30s
       timeout: 10s
       retries: 10

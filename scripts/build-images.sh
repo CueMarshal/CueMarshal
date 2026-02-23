@@ -19,6 +19,10 @@ docker build -t ${REGISTRY}/conductor:${TAG} ./conductor
 echo "Building gateway..."
 docker build -t ${REGISTRY}/gateway:${TAG} ./gateway
 
+# Build landing
+echo "Building landing..."
+docker build -t ${REGISTRY}/landing:${TAG} ./landing
+
 # Build runner
 echo "Building runner..."
 docker build -t ${REGISTRY}/runner:${TAG} -f ./runner/Dockerfile .
@@ -39,6 +43,6 @@ docker images | grep cuemarshal | head -10
 
 echo ""
 echo "To load into minikube:"
-echo "  for img in conductor gateway runner mcp-gitea mcp-conductor mcp-system mcp-vector mcp-sonar; do"
+echo "  for img in conductor gateway landing runner mcp-gitea mcp-conductor mcp-system mcp-vector mcp-sonar; do"
 echo "    minikube image load ${REGISTRY}/\$img:${TAG}"
 echo "  done"
