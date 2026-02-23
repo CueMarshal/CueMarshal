@@ -35,7 +35,7 @@
     "@types/node": "^22.10.5",
     "@types/pg": "^8.11.10",
     "@types/ws": "^8.5.13",
-    "drizzle-kit": "^0.29.0",
+    "drizzle-kit": "^0.31.9",
     "jest": "^30.2.0",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.6",
@@ -44,5 +44,11 @@
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "overrides": {
+    "minimatch": "^10.2.2",
+    "glob": "^13.0.0",
+    "test-exclude": "^8.0.0",
+    "esbuild": ">=0.25.0"
   }
 }
