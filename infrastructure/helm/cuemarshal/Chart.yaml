@@ -13,3 +13,10 @@ keywords:
 maintainers:
   - name: CueMarshal Team
     email: dev@cuemarshal.dev
+
+dependencies:
+  - name: ingress-nginx
+    version: "4.11.3"
+    repository: https://kubernetes.github.io/ingress-nginx
+    condition: ingress-nginx.enabled
+

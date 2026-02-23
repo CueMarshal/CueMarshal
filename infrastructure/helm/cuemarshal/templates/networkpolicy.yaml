@@ -34,10 +34,9 @@ spec:
   # Allow external (for LLM API calls, etc.)
   - to:
     - namespaceSelector: {}
-    - podSelector: {}
-  ports:
-  - protocol: TCP
-    port: 443
-  - protocol: TCP
-    port: 80
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
 {{- end }}

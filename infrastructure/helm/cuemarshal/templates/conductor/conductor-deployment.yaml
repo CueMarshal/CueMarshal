@@ -20,23 +20,41 @@ spec:
       containers:
       - name: conductor
         image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "conductor") }}
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          export DATABASE_URL="postgresql://{{ .Values.postgres.user | default "cuemarshal" }}:${POSTGRES_PASSWORD}@{{ include "cuemarshal.fullname" . }}-postgres:5432/{{ .Values.postgres.database | default "cuemarshal" }}"
+          export REDIS_URL="redis://:${REDIS_PASSWORD}@{{ include "cuemarshal.fullname" . }}-redis:6379"
+          exec node dist/index.js
         env:
         - name: PORT
           value: "80"
-        - name: DATABASE_URL
-          value: "postgresql://{{ .Values.postgres.user | default "cuemarshal" }}:$(POSTGRES_PASSWORD)@{{ include "cuemarshal.fullname" . }}-postgres:5432/{{ .Values.postgres.database | default "cuemarshal" }}"
+        - name: POSTGRES_USER
+          value: "{{ .Values.postgres.user | default "cuemarshal" }}"
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
               name: {{ include "cuemarshal.fullname" . }}-secrets
               key: postgres-password
-        - name: REDIS_URL
-          value: "redis://:$(REDIS_PASSWORD)@{{ include "cuemarshal.fullname" . }}-redis:6379"
+        - name: POSTGRES_HOST
+          value: "{{ include "cuemarshal.fullname" . }}-postgres"
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DB
+          value: "{{ .Values.postgres.database | default "cuemarshal" }}"
+        - name: DATABASE_URL
+          value: "postgresql://{{ .Values.postgres.user | default "cuemarshal" }}:$(POSTGRES_PASSWORD)@{{ include "cuemarshal.fullname" . }}-postgres:5432/{{ .Values.postgres.database | default "cuemarshal" }}"
+        - name: REDIS_HOST
+          value: "{{ include "cuemarshal.fullname" . }}-redis"
+        - name: REDIS_PORT
+          value: "6379"
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
               name: {{ include "cuemarshal.fullname" . }}-secrets
               key: redis-password
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@{{ include "cuemarshal.fullname" . }}-redis:6379"
         - name: GITEA_URL
           value: "http://{{ include "cuemarshal.fullname" . }}-gitea:3000"
         - name: GITEA_TOKEN

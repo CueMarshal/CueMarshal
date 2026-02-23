@@ -68,3 +68,4 @@ MEMORY.md
 .continue
 .cursor
 .gitea
+infrastructure/helm/cuemarshal/local-values.yaml

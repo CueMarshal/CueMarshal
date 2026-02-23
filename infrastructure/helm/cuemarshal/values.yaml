@@ -256,6 +256,28 @@ ingress:
   tls:
     enabled: true
 
+# NGINX Ingress Controller (subchart)
+ingress-nginx:
+  enabled: true
+  controller:
+    ingressClassResource:
+      name: nginx
+      enabled: true
+      default: true
+    service:
+      type: LoadBalancer
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    metrics:
+      enabled: true
+    admissionWebhooks:
+      enabled: false  # Disable for local development
+
 # NetworkPolicy
 networkPolicy:
   enabled: true
