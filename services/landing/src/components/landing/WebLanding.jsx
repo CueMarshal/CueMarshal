@@ -123,25 +123,25 @@ export default function WebLanding() {
         <div className="md:hidden flex p-2 bg-gray-50 border-b border-gray-200 gap-2 shrink-0">
           <button
             onClick={() => setActiveTab('chat')}
-            className={`flex-1 py-2 px-4 rounded-md font-medium text-sm transition-colors flex justify-center items-center gap-2 \${activeTab === 'chat' ? 'bg-white shadow-sm text-cuemarshal-navy border border-gray-200' : 'text-gray-500'}`}
+            className={`flex-1 py-2 px-4 rounded-md font-medium text-sm transition-colors flex justify-center items-center gap-2 ${activeTab === 'chat' ? 'bg-white shadow-sm text-cuemarshal-navy border border-gray-200' : 'text-gray-500'}`}
           >
             <Bot size={16} /> Chat
           </button>
           <button
             onClick={() => setActiveTab('activity')}
-            className={`flex-1 py-2 px-4 rounded-md font-medium text-sm transition-colors flex justify-center items-center gap-2 \${activeTab === 'activity' ? 'bg-white shadow-sm text-cuemarshal-navy border border-gray-200' : 'text-gray-500'}`}
+            className={`flex-1 py-2 px-4 rounded-md font-medium text-sm transition-colors flex justify-center items-center gap-2 ${activeTab === 'activity' ? 'bg-white shadow-sm text-cuemarshal-navy border border-gray-200' : 'text-gray-500'}`}
           >
             <Terminal size={16} /> Activity
           </button>
         </div>
 
         {/* Left Panel: Chat (Default) */}
-        <div className={`flex-1 flex flex-col bg-white border-r border-gray-100 md:flex h-full \${activeTab === 'activity' ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`flex-1 flex flex-col bg-white border-r border-gray-100 md:flex h-full ${activeTab === 'activity' ? 'hidden md:flex' : 'flex'}`}>
           <ChatView />
         </div>
 
         {/* Right Panel: Activity (Agents) */}
-        <div className={`flex-1 flex flex-col bg-cuemarshal-grey md:flex h-full \${activeTab === 'chat' ? 'hidden md:flex' : 'flex'} border-l border-gray-200 relative`}>
+        <div className={`flex-1 flex flex-col bg-cuemarshal-grey md:flex h-full ${activeTab === 'chat' ? 'hidden md:flex' : 'flex'} border-l border-gray-200 relative`}>
           <ActivityView />
         </div>
 

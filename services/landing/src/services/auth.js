@@ -269,6 +269,9 @@ export const authService = {
         };
       }
 
+      // Refresh the OAuth2 client ID from the API (in-memory config is lost on page reload)
+      await fetchOAuth2ClientId();
+
       // Exchange code for token
       const tokenResult = await this.exchangeCodeForToken(code, codeVerifier);
 
