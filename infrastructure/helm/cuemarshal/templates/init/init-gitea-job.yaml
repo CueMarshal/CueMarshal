@@ -76,6 +76,10 @@ spec:
               name: {{ include "cuemarshal.fullname" . }}-secrets
               key: google-client-secret
         {{- end }}
+        {{- if .Values.sonarqube.enabled }}
+        - name: SONAR_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-sonarqube:9000/sonar"
+        {{- end }}
         volumeMounts:
         - name: init-script
           mountPath: /scripts

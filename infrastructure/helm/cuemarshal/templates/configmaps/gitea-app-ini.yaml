@@ -11,7 +11,7 @@ data:
     
     [server]
     DOMAIN = {{ include "cuemarshal.fqdn" . }}
-    ROOT_URL = {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ include "cuemarshal.fqdn" . }}/
+    ROOT_URL = {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ include "cuemarshal.fqdn" . }}/gitea/
     HTTP_PORT = 3000
     SSH_DOMAIN = {{ include "cuemarshal.fqdn" . }}
     SSH_PORT = 22

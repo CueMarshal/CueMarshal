@@ -27,7 +27,7 @@ spec:
         - name: GF_USERS_ALLOW_SIGN_UP
           value: "false"
         - name: GF_SERVER_ROOT_URL
-          value: "https://{{ include "cuemarshal.fqdn" . }}/grafana/"
+          value: "{{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ include "cuemarshal.fqdn" . }}/grafana/"
         - name: GF_SERVER_SERVE_FROM_SUB_PATH
           value: "true"
         {{- if .Values.auth.google.clientId }}
