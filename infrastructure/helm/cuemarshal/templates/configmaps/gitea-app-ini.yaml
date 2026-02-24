@@ -11,7 +11,7 @@ data:
     
     [server]
     DOMAIN = {{ include "cuemarshal.fqdn" . }}
-    ROOT_URL = https://{{ include "cuemarshal.fqdn" . }}/
+    ROOT_URL = {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ include "cuemarshal.fqdn" . }}/
     HTTP_PORT = 3000
     SSH_DOMAIN = {{ include "cuemarshal.fqdn" . }}
     SSH_PORT = 22
@@ -43,6 +43,13 @@ data:
     ENABLE_CAPTCHA = false
     DEFAULT_ALLOW_CREATE_ORGANIZATION = true
     
+    [service.explore]
+    REQUIRE_SIGNIN_VIEW = false
+    DISABLE_USERS_PAGE = false
+    
+    [session]
+    PROVIDER = memory
+    
     [actions]
     ENABLED = true
     DEFAULT_ACTIONS_URL = github
@@ -50,6 +57,27 @@ data:
     [webhook]
     ALLOWED_HOST_LIST = *
     SKIP_TLS_VERIFY = true
+    
+    [oauth2]
+    ENABLED = true
+    
+    [oauth2_client]
+    REGISTER_EMAIL_CONFIRM = false
+    ENABLE_AUTO_REGISTRATION = true
+    USERNAME = nickname
+    
+    [indexer]
+    REPO_INDEXER_ENABLED = true
+    REPO_INDEXER_TYPE = bleve
+    ISSUE_INDEXER_TYPE = bleve
+    
+    [git]
+    MAX_GIT_DIFF_LINES = 10000
+    MAX_GIT_DIFF_LINE_CHARACTERS = 5000
+    MAX_GIT_DIFF_FILES = 100
+    
+    [api]
+    ENABLE_SWAGGER = true
     
     [log]
     MODE = console

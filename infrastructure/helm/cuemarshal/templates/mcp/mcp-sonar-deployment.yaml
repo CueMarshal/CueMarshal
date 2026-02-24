@@ -21,6 +21,7 @@ spec:
       containers:
       - name: mcp-sonar
         image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "mcp-sonar") }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:
         - name: MCP_TRANSPORT
           value: "http"

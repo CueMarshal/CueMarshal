@@ -66,7 +66,6 @@ spec:
     {{- include "cuemarshal.selectorLabels" . | nindent 4 }}
     component: mcp-vector
 ---
-{{- if .Values.sonarqube.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -83,4 +82,3 @@ spec:
   selector:
     {{- include "cuemarshal.selectorLabels" . | nindent 4 }}
     component: mcp-sonar
-{{- end }}

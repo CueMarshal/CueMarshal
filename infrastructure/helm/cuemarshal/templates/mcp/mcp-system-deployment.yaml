@@ -20,6 +20,7 @@ spec:
       containers:
       - name: mcp-system
         image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "mcp-system") }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:
         - name: MCP_TRANSPORT
           value: "http"

@@ -20,6 +20,7 @@ spec:
       containers:
       - name: mcp-gitea
         image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "mcp-gitea") }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:
         - name: MCP_TRANSPORT
           value: "http"

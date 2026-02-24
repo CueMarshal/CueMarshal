@@ -22,13 +22,18 @@ spec:
       containers:
       - name: runner
         image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "runner") }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:
         - name: GITEA_URL
           value: "http://{{ include "cuemarshal.fullname" . }}-gitea:3000"
         - name: GITEA_TOKEN
           value: ""  # Populated by init-gitea
         - name: GITEA_RUNNER_REGISTRATION_TOKEN
-          value: ""  # Populated by init-gitea
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: runner-registration-token
+              optional: true
         - name: RUNNER_NAME
           value: "$(POD_NAME)"
         - name: POD_NAME

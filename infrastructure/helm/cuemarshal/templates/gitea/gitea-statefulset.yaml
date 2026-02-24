@@ -25,12 +25,10 @@ spec:
         args:
         - |
           mkdir -p /data/gitea/conf
-          if [ ! -f /data/gitea/conf/app.ini ]; then
-            cp /etc/templates/app.ini /data/gitea/conf/app.ini
-            # Replace password placeholder
-            sed -i "s/POSTGRES_PASSWORD_PLACEHOLDER/$(cat /secrets/postgres-password)/" /data/gitea/conf/app.ini
-            chown -R 1000:1000 /data/gitea/conf
-          fi
+          cp /etc/templates/app.ini /data/gitea/conf/app.ini
+          # Replace password placeholder
+          sed -i "s/POSTGRES_PASSWORD_PLACEHOLDER/$(cat /secrets/postgres-password)/" /data/gitea/conf/app.ini
+          chown -R 1000:1000 /data/gitea/conf
         volumeMounts:
         - name: data
           mountPath: /data

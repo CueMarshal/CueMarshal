@@ -81,5 +81,9 @@ Check if Google OAuth is enabled
 Workspace FQDN
 */}}
 {{- define "cuemarshal.fqdn" -}}
+{{- if .Values.workspace.fqdn }}
+{{- .Values.workspace.fqdn }}
+{{- else }}
 {{- printf "%s.%s" .Values.workspace.slug .Values.workspace.domain }}
+{{- end }}
 {{- end }}

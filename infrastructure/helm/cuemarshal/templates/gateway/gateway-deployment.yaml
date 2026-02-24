@@ -20,12 +20,13 @@ spec:
       containers:
       - name: gateway
         image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "gateway") }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
         command: ["/bin/sh", "-c"]
         args:
         - |
           export DATABASE_URL="postgresql://{{ .Values.postgres.user | default "cuemarshal" }}:${POSTGRES_PASSWORD}@{{ include "cuemarshal.fullname" . }}-postgres:5432/{{ .Values.postgres.database | default "cuemarshal" }}"
           export REDIS_URL="redis://:${REDIS_PASSWORD}@{{ include "cuemarshal.fullname" . }}-redis:6379"
-          exec litellm --config /app/config.yaml --port 80 --num_workers 4 --detailed_debug
+          exec litellm --config /app/config.yaml --port 80 --num_workers 1
         env:
         {{- if .Values.llm.groqApiKey }}
         - name: GROQ_API_KEY

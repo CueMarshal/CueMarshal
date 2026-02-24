@@ -20,6 +20,7 @@ spec:
       containers:
       - name: conductor
         image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "conductor") }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
         command: ["/bin/sh", "-c"]
         args:
         - |

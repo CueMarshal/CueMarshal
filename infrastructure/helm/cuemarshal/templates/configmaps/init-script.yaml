@@ -7,4 +7,4 @@ metadata:
     component: init
 data:
   init-gitea.sh: |
-{{ .Files.Get "../../infrastructure/gitea/init-gitea.sh" | nindent 4 }}
+{{ .Files.Get "scripts/init-gitea.sh" | nindent 4 }}

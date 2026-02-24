@@ -14,6 +14,7 @@ spec:
         component: init
     spec:
       restartPolicy: OnFailure
+      serviceAccountName: {{ include "cuemarshal.fullname" . }}-init-gitea
       initContainers:
       - name: wait-for-gitea
         image: curlimages/curl:latest
@@ -32,6 +33,8 @@ spec:
         env:
         - name: GITEA_URL
           value: "http://{{ include "cuemarshal.fullname" . }}-gitea:3000"
+        - name: GITEA_EXTERNAL_URL
+          value: "{{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ include "cuemarshal.fqdn" . }}"
         - name: GITEA_ADMIN_USER
           value: "{{ .Values.workspace.slug }}-admin"
         - name: GITEA_ADMIN_PASSWORD
@@ -53,6 +56,10 @@ spec:
             secretKeyRef:
               name: {{ include "cuemarshal.fullname" . }}-secrets
               key: conductor-secret
+        - name: CONFIGMAP_NAME
+          value: "{{ include "cuemarshal.fullname" . }}-oauth-config"
+        - name: K8S_SECRET_NAME
+          value: "{{ include "cuemarshal.fullname" . }}-secrets"
         {{- if .Values.auth.google.clientId }}
         - name: GOOGLE_CLIENT_ID
           valueFrom:
@@ -80,5 +87,9 @@ spec:
       - name: tokens
         emptyDir: {}
       - name: gitea-data
+        {{- if .Values.gitea.persistence.enabled }}
         persistentVolumeClaim:
           claimName: data-{{ include "cuemarshal.fullname" . }}-gitea-0
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
