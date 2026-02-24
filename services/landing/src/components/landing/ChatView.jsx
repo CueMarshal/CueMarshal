@@ -96,7 +96,7 @@ export default function ChatView() {
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3 shrink-0">
         <div className="w-10 h-10 rounded-full bg-cuemarshal-navy flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-cuemarshal-blue ring-offset-2">
-          <img src="/avatars/marshal.png" alt="Marshal" className="w-full h-full object-cover" />
+          <img src="/images/avatars/marshal.png" alt="Marshal" className="w-full h-full object-cover" />
         </div>
         <div className="flex-1">
           <h2 className="font-semibold text-cuemarshal-navy text-lg">Marshal</h2>

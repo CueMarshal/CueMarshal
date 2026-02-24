@@ -3,14 +3,14 @@ import { Activity, AlertCircle } from 'lucide-react';
 import { fetchAgentActivity } from '../../services/api';
 
 const AGENTS = [
-  { id: 'conductor', name: 'Marshal', species: 'Lion Conductor', avatar: '/avatars/marshal.png', color: 'bg-cuemarshal-navy', textClass: 'text-cuemarshal-navy', desc: 'Starts the symphony' },
-  { id: 'architect', name: 'Ava', species: 'Snowy Owl Architect', avatar: '/avatars/ava.png', color: 'bg-indigo-500', textClass: 'text-indigo-600', desc: 'Wise visionary planner' },
-  { id: 'dev', name: 'Dave', species: 'Beaver Developer', avatar: '/avatars/dave.png', color: 'bg-green-600', textClass: 'text-green-600', desc: 'Industrious builder' },
-  { id: 'reviewer', name: 'Reese', species: 'Bald Eagle Reviewer', avatar: '/avatars/reese.png', color: 'bg-amber-500', textClass: 'text-amber-600', desc: 'Laser-sharp critic' },
-  { id: 'tester', name: 'Tess', species: 'Raccoon Tester', avatar: '/avatars/tess.png', color: 'bg-purple-500', textClass: 'text-purple-600', desc: 'Clever bug washer' },
+  { id: 'conductor', name: 'Marshal', species: 'Lion Conductor', avatar: '/images/avatars/marshal.png', color: 'bg-cuemarshal-navy', textClass: 'text-cuemarshal-navy', desc: 'Starts the symphony' },
+  { id: 'architect', name: 'Ava', species: 'Snowy Owl Architect', avatar: '/images/avatars/ava.png', color: 'bg-indigo-500', textClass: 'text-indigo-600', desc: 'Wise visionary planner' },
+  { id: 'dev', name: 'Dave', species: 'Beaver Developer', avatar: '/images/avatars/dave.png', color: 'bg-green-600', textClass: 'text-green-600', desc: 'Industrious builder' },
+  { id: 'reviewer', name: 'Reese', species: 'Bald Eagle Reviewer', avatar: '/images/avatars/reese.png', color: 'bg-amber-500', textClass: 'text-amber-600', desc: 'Laser-sharp critic' },
+  { id: 'tester', name: 'Tess', species: 'Raccoon Tester', avatar: '/images/avatars/tess.png', color: 'bg-purple-500', textClass: 'text-purple-600', desc: 'Clever bug washer' },
   { id: 'devops', name: 'Devin', species: 'Octopus DevOps', emoji: '\u{1F419}', color: 'bg-cyan-600', textClass: 'text-cyan-600', desc: 'Master multi-tasker' },
-  { id: 'writer', name: 'Dot', species: 'Parrot Tech Writer', avatar: '/avatars/dot.png', color: 'bg-rose-500', textClass: 'text-rose-600', desc: 'Explains it clearly' },
-  { id: 'linter', name: 'Linton', species: 'Siamese Cat Linter', avatar: '/avatars/linton.png', color: 'bg-slate-700', textClass: 'text-slate-700', desc: 'Picky perfectionist' },
+  { id: 'writer', name: 'Dot', species: 'Parrot Tech Writer', avatar: '/images/avatars/dot.png', color: 'bg-rose-500', textClass: 'text-rose-600', desc: 'Explains it clearly' },
+  { id: 'linter', name: 'Linton', species: 'Siamese Cat Linter', avatar: '/images/avatars/linton.png', color: 'bg-slate-700', textClass: 'text-slate-700', desc: 'Picky perfectionist' },
 ];
 
 // Map agent role names from the API to the AGENTS array ids
