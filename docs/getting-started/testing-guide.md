@@ -39,84 +39,104 @@ cd ~/source/repos/cuemarshal
 - [ ] If Google OAuth: Gitea shows Google sign-in option
 - [ ] Grafana loads at http://localhost:8180/grafana (if enabled)
 
-## Test 2: Helm Chart on Minikube
+## Test 2: Helm Chart on k3d
 
 ### Prerequisites
-- minikube installed
+- k3d installed
 - kubectl installed
 - Helm 3.12+ installed
 
-### Setup Minikube
+### Setup k3d
 
 ```bash
-# Start minikube with sufficient resources
-minikube start --cpus=4 --memory=8192 --disk-size=20g
+# Create k3d cluster with ingress ports mapped
+k3d cluster create dev \
+  --port "80:80@loadbalancer" \
+  --port "443:443@loadbalancer"
 
-# Enable ingress addon
-minikube addons enable ingress
+# Verify k3d is running
+k3d cluster list
 
-# Verify
-kubectl get pods -n ingress-nginx
+# Add demo.local to /etc/hosts for local access
+echo "127.0.0.1 demo.local" | sudo tee -a /etc/hosts
 ```
+
+**Important**: k3d comes with **traefik** as the default ingress controller (not nginx-ingress). Traefik is fully integrated with k3d's networking and service discovery.
 
 ### Deploy CueMarshal
 
 ```bash
-cd ~/source/repos/cuemarshal
+cd ~/source/repos/verbose-octo
 
-# Install from local chart
-helm install test-workspace ./infrastructure/helm/cuemarshal \
-  --namespace cuemarshal-ws-test \
+# Update kubeconfig to access the cluster
+k3d kubeconfig get dev > ~/.kube/k3d-dev-config
+export KUBECONFIG=~/.kube/k3d-dev-config
+
+# Install Helm dependencies
+cd infrastructure/helm/cuemarshal
+helm dependency update
+
+# Deploy CueMarshal using local-values.yaml
+cd ../../../
+helm install dev-workspace ./infrastructure/helm/cuemarshal \
+  --namespace cuemarshal-ws-dev \
   --create-namespace \
-  --values ./infrastructure/helm/cuemarshal/test-values.yaml \
-  --debug
+  --values ./infrastructure/helm/cuemarshal/local-values.yaml
 
 # Watch pods starting
-kubectl get pods -n cuemarshal-ws-test --watch
+kubectl get pods -n cuemarshal-ws-dev --watch
 ```
 
-### Expected Result (Current State)
+### Expected Result
 
-With the current templates (postgres, redis, ingress, policies), you should see:
-- PostgreSQL StatefulSet created and running
-- Redis Deployment created and running
-- Services created for postgres and redis
-- Ingress created for test.local
-
-**Note**: This is a minimal deployment. Full functionality requires the remaining templates (Gitea, Conductor, Gateway, etc.). See `infrastructure/helm/cuemarshal/TEMPLATES_TODO.md`.
+Full deployment with all core services running:
+- PostgreSQL StatefulSet with persistence
+- Redis Deployment 
+- Gitea with initialization job
+- Conductor service with proper configuration
+- Gateway service
+- Landing page accessible via Traefik ingress
+- MCP (Model Context Protocol) servers
+- Runner with Docker-in-Docker support
+- Traefik ingress configured for demo.local
 
 ### Verification Checklist
 
 ```bash
-# Check all resources created
-kubectl get all -n cuemarshal-ws-test
+# Check all resources are created and running
+kubectl get all -n cuemarshal-ws-dev
 
-# Check postgres
-kubectl get statefulset -n cuemarshal-ws-test
-kubectl logs -n cuemarshal-ws-test statefulset/test-workspace-cuemarshal-postgres
+# Verify core services are healthy
+kubectl get statefulset -n cuemarshal-ws-dev  # postgres, runner
+kubectl get deployment -n cuemarshal-ws-dev   # All other services
+kubectl get jobs -n cuemarshal-ws-dev         # init-gitea should be Completed
 
-# Check redis
-kubectl get deployment -n cuemarshal-ws-test
-kubectl logs -n cuemarshal-ws-test deployment/test-workspace-cuemarshal-redis
+# Check ingress is properly configured with traefik
+kubectl get ingress -n cuemarshal-ws-dev
+kubectl describe ingress dev-workspace-cuemarshal -n cuemarshal-ws-dev
 
-# Check secrets
-kubectl get secret -n cuemarshal-ws-test test-workspace-cuemarshal-secrets -o yaml
+# Verify landing service is accessible
+curl -s http://demo.local | grep -q "CueMarshal" && echo "✓ Landing page loads"
+curl -s -w "HTTP %{http_code}\n" http://demo.local
 
-# Check ingress
-kubectl get ingress -n cuemarshal-ws-test
+# Check logs if needed
+kubectl logs -n cuemarshal-ws-dev deployment/dev-workspace-cuemarshal-landing
+
+# Check database is initialized
+kubectl get statefulset -n cuemarshal-ws-dev dev-workspace-cuemarshal-postgres
 ```
 
 ### Cleanup
 
 ```bash
 # Uninstall
-helm uninstall test-workspace --namespace cuemarshal-ws-test
+helm uninstall dev-workspace --namespace cuemarshal-ws-dev
 
 # Delete namespace
-kubectl delete namespace cuemarshal-ws-test
+kubectl delete namespace cuemarshal-ws-dev
 
-# Stop minikube
-minikube stop
+# Stop k3d
+k3d cluster delete dev
 ```
 
 ## Test 3: Management API (Local Development)
@@ -161,7 +181,7 @@ npm run dev
 ### Steps
 
 ```bash
-cd ~/source/repos/cuemarshal-cloud/web
+cd ~/source/repos/verbose-octo/mobile
 
 # Install dependencies
 npm install
@@ -177,6 +197,56 @@ npm run web
 - [ ] Login screen shows "Continue with Google"
 - [ ] Navigation to workspace screen works
 
+## Test 5: Accessing Services in k3d Deployment
+
+### Prerequisites
+- CueMarshal deployed to k3d (see Test 2)
+
+### Accessing Individual Services
+
+From your local machine with port-forwarding:
+
+```bash
+export KUBECONFIG=~/.kube/k3d-dev-config
+
+# Access Gitea
+kubectl port-forward -n cuemarshal-ws-dev svc/dev-workspace-cuemarshal-gitea 3000:3000 &
+# Then visit http://localhost:3000
+
+# Access Conductor API
+kubectl port-forward -n cuemarshal-ws-dev svc/dev-workspace-cuemarshal-conductor 8180:80 &
+# Then test: curl http://localhost:8180/health
+
+# Access Gateway
+kubectl port-forward -n cuemarshal-ws-dev svc/dev-workspace-cuemarshal-gateway 8080:80 &
+# Then check: curl http://localhost:8080/health
+
+# Access PostgreSQL (for debugging)
+kubectl port-forward -n cuemarshal-ws-dev svc/dev-workspace-cuemarshal-postgres 5432:5432 &
+# Then connect: psql -h localhost -U postgres -W
+```
+
+### Accessing via Ingress (Traefik)
+
+All services are accessible through the Traefik ingress on demo.local:
+
+```bash
+# Landing page (main entry point)
+curl http://demo.local
+
+# Direct service access (if routes configured)
+curl http://api.demo.local          # Gateway
+curl http://admin.demo.local        # Gitea
+curl http://config.demo.local       # Conductor configuration
+```
+
+### Verification Checklist
+- [ ] Landing page loads at http://demo.local (HTTP 200)
+- [ ] Can access Gitea via port-forward
+- [ ] Conductor API responds to health check
+- [ ] Can view logs: `kubectl logs -f -n cuemarshal-ws-dev deployment/dev-workspace-cuemarshal-landing`
+- [ ] Database is initialized: `kubectl exec -n cuemarshal-ws-dev statefulset/dev-workspace-cuemarshal-postgres -- psql -U postgres -l`
+
 ## Current Test Coverage
 
 ### ✅ What Can Be Tested Now
@@ -186,53 +256,82 @@ npm run web
 4. Management API locally (basic routes)
 5. Onboarding web wizard (3 screens) locally
 6. Helm chart structure and validation (`helm lint`)
-7. Minimal Helm deployment to minikube (postgres + redis only)
+7. **Full Helm deployment to k3d with traefik** ✨ NEW
+   - All core services (postgres, redis, gitea, conductor, gateway, landing, mcp-servers, runner)
+   - Traefik ingress routing to landing service
+   - Service discovery and inter-pod communication
+   - Init jobs (Gitea initialization)
+   - Local development with hot-reload
 
 ### 🚧 What Needs More Work to Test
-1. **Full Helm deployment** - Requires remaining 30+ templates
+1. **Nginx-ingress controller** - Has Lua-based backend discovery issues; use **traefik instead** (k3d built-in)
 2. **End-to-end onboarding flow** - Requires 6 more screens
-3. **Workspace provisioning** - Requires complete Helm chart
+3. **Workspace provisioning** - Gitea repository creation within deployed workspace
 4. **Wave payment** - Requires Wave API credentials
 5. **Production AKS deployment** - Requires ACR, AKS cluster, images pushed
 
 ## Priority for Complete Testing
 
-1. **Finish Helm templates** (critical path):
-   - Gitea (StatefulSet, Service, ConfigMap)
-   - Conductor (Deployment, Service)
-   - Gateway (Deployment, Service, ConfigMap)
-   - Init Job (for init-gitea.sh)
-   - Nginx (Deployment, Service, ConfigMap)
+1. **Gateway and Conductor integration**:
+   - Verify inter-service communication works correctly
+   - Test workflow creation through Conductor
+   - Verify Gateway routes requests properly
 
-2. **Test on minikube**:
-   - Deploy full stack
-   - Verify init-gitea completes
-   - Access Gitea via ingress
-   - Test Google OAuth (if configured)
+2. **Gitea integration**:
+   - Verify Gitea initialization job completes successfully
+   - Test webhook configuration
+   - Verify OAuth SSO works if configured
 
-3. **Complete onboarding screens**:
-   - Remaining 6 screens
-   - Connect to management API
-   - Test end-to-end flow
+3. **End-to-end onboarding flow** (when available):
+   - Create workspace via web wizard
+   - Deploy workspace to k3d automatically
+   - Verify all services are accessible
 
-4. **Integration test**:
-   - Onboard via web wizard
-   - Provision workspace to minikube
-   - Access workspace services
-   - Create an issue in Gitea
-   - Verify agent workflow
+4. **Production deployment** (for staging/CI):
+   - Test AKS deployment
+   - Verify Azure Key Vault integration
+   - Test production networking and ingress configuration
+   - Verify monitoring and logging stack
+
+5. **Stress testing**:
+   - Multiple concurrent workflows
+   - Large file uploads
+   - Extended workflow execution times
+   - Pod restart resilience
 
 ## Troubleshooting
+
+### Ingress Controller Choice (Important for k3d)
+
+**Lesson Learned:** The Helm chart can be configured with different ingress controllers via `ingress.className`:
+
+- **traefik** (RECOMMENDED for k3d): k3d's built-in ingress controller. Better integrated with k3d's networking, automatic LoadBalancer support, and reliable service discovery.
+- **nginx** (NOT recommended for k3d): The nginx-ingress controller uses Lua-based dynamic backend discovery which can have issues resolving services. Works better on cloud platforms with proper load balancer support.
+
+**Configuration** in `local-values.yaml`:
+```yaml
+ingress:
+  enabled: true
+  className: "traefik"  # Use traefik for k3d
+  
+ingress-nginx:
+  enabled: false  # Disable nginx-ingress for k3d
+```
 
 ### Docker Compose Issues
 - **Services unhealthy**: Check logs with `docker compose logs -f <service>`
 - **Port conflicts**: Stop conflicting services or change ports in docker-compose.yml
 - **API key errors**: Verify keys with `scripts/validate-env.sh --prod`
 
-### Minikube Issues
-- **Pods pending**: Check storage with `kubectl get pvc -n cuemarshal-ws-test`
-- **ImagePullBackOff**: Images need to be in registry or loaded into minikube
-- **Ingress not working**: Verify ingress addon with `minikube addons list`
+### k3d Issues
+- **Pods pending**: Check storage with `kubectl get pvc -n cuemarshal-ws-dev`
+- **ImagePullBackOff**: Images need to be in registry or loaded into k3d with `k3d image import`
+- **Ingress not working**: 
+  - Verify traefik is running: `kubectl get pods -n kube-system | grep traefik`
+  - Check ingress status: `kubectl describe ingress -n cuemarshal-ws-dev`
+  - Verify /etc/hosts has `127.0.0.1 demo.local`
+- **404 responses from ingress**: Likely backend service discovery issue - use traefik instead of nginx-ingress
+- **LoadBalancer service pending**: k3d should auto-assign EXTERNAL-IP with traefik; if not, restart services
 
 ### Management API Issues
 - **Connection refused**: Check DATABASE_URL points to running postgres

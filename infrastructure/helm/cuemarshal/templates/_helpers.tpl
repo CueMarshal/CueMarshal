@@ -59,11 +59,18 @@ Image tag - defaults to chart appVersion
 {{/*
 Full image reference for custom images
 Usage: include "cuemarshal.image" (dict "Values" .Values "component" "conductor")
+Handles:
+  - Empty registry (local): cuemarshal/conductor:latest
+  - External registry: ghcr.io/cuemarshal/conductor:latest
 */}}
 {{- define "cuemarshal.image" -}}
 {{- $registry := .Values.image.registry | trimSuffix "/" }}
 {{- $tag := .Values.image.tag | default "latest" }}
+{{- if $registry }}
 {{- printf "%s/cuemarshal/%s:%s" $registry .component $tag }}
+{{- else }}
+{{- printf "cuemarshal/%s:%s" .component $tag }}
+{{- end }}
 {{- end }}
 
 {{/*
