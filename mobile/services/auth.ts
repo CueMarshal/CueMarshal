@@ -2,7 +2,7 @@ import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import * as Crypto from 'expo-crypto';
 import axios from 'axios';
-import { config, fetchOAuth2ClientId } from '../config';
+import { config } from '../config';
 import { storage } from './storage';
 import { AuthResult, User } from '../types/auth';
 import { getGlobalRuntimeConfig } from '../hooks/useRuntimeConfig';
@@ -12,74 +12,92 @@ WebBrowser.maybeCompleteAuthSession();
 
 export const authService = {
   /**
-   * Start OAuth2 authorization flow
-   * This opens a browser window for the user to authenticate with Gitea
-   * 
-   * Note: The custom URL scheme redirect (cuemarshal://oauth) requires a development build
-   * or standalone build. It will not work in Expo Go. For Expo Go compatibility,
-   * you would need to use AuthSession.makeRedirectUri() with proxy support.
+   * Start OAuth2 authorization flow using the BFF pattern.
+   * The server builds the authorization URL (client ID is injected server-side).
+   *
+   * Note: The custom URL scheme redirect (cuemarshal://oauth) requires a
+   * development build or standalone build. It will not work in Expo Go.
    */
   async startOAuthFlow(): Promise<AuthResult> {
     try {
       const runtimeConfig = await getGlobalRuntimeConfig();
       const { oauth2 } = config;
-      const giteaUrl = runtimeConfig.giteaUrl;
+      const conductorUrl = runtimeConfig.conductorUrl;
 
-      // Discover the live OAuth2 client ID from the conductor.
-      // Falls back to the value in app.json / in-memory config.
-      const clientId = await fetchOAuth2ClientId(runtimeConfig.conductorUrl);
-      if (!clientId) {
-        return {
-          success: false,
-          error: 'OAuth2 Client ID is not configured. Is the platform running?',
-        };
-      }
-      
       // Generate PKCE challenge for enhanced security
       const codeVerifier = await this.generateCodeVerifier();
       const codeChallenge = await this.generateCodeChallenge(codeVerifier);
-      
-      // Create authorization request
-      // Note: Using custom redirect URI - requires dev client or standalone build
+
+      // Build query params for the BFF authorize endpoint
+      const state = Crypto.randomUUID
+        ? Crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      const params = new URLSearchParams({
+        redirect_uri: oauth2.redirectUri,
+        code_challenge: codeChallenge,
+        state,
+        scopes: oauth2.scopes.join(' '),
+      });
+
+      // Ask the BFF to build the authorization URL
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`${conductorUrl}/auth/authorize?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        return {
+          success: false,
+          error: body.error || 'Failed to get authorization URL from server',
+        };
+      }
+
+      const { authorizeUrl } = await res.json();
+
+      // Parse the authorization URL to extract the discovery endpoint base
+      const authUrl = new URL(authorizeUrl);
+      const giteaOrigin = authUrl.origin;
+
+      // Create an AuthSession request that uses the pre-built URL
       const authRequest = new AuthSession.AuthRequest({
-        clientId,
+        clientId: 'bff', // placeholder — the real client ID is in the authorizeUrl
         redirectUri: oauth2.redirectUri,
         scopes: oauth2.scopes,
         responseType: AuthSession.ResponseType.Code,
         usePKCE: true,
         codeChallengeMethod: AuthSession.CodeChallengeMethod.S256,
         codeChallenge,
-        extraParams: {
-          // Gitea-specific parameters
-        },
       });
 
-      // Load the authorization request
       const discovery = {
-        authorizationEndpoint: `${giteaUrl}/login/oauth/authorize`,
-        tokenEndpoint: `${giteaUrl}/login/oauth/access_token`,
-        revocationEndpoint: `${giteaUrl}/login/oauth/revoke`,
+        authorizationEndpoint: `${giteaOrigin}/login/oauth/authorize`,
+        tokenEndpoint: `${giteaOrigin}/login/oauth/access_token`,
+        revocationEndpoint: `${giteaOrigin}/login/oauth/revoke`,
       };
 
-      await authRequest.makeAuthUrlAsync(discovery);
-
-      // Prompt for authorization
-      const result = await authRequest.promptAsync(discovery);
+      // Open the browser with the BFF-built authorize URL directly
+      const result = await WebBrowser.openAuthSessionAsync(
+        authorizeUrl,
+        oauth2.redirectUri
+      );
 
       if (result.type === 'success') {
-        const { code } = result.params;
-        
-        // Exchange authorization code for access token
-        const tokenResult = await this.exchangeCodeForToken(
-          code,
-          codeVerifier
-        );
+        const resultUrl = new URL(result.url);
+        const code = resultUrl.searchParams.get('code');
+
+        if (!code) {
+          return { success: false, error: 'No authorization code received' };
+        }
+
+        // Exchange code for token via BFF
+        const tokenResult = await this.exchangeCodeForToken(code, codeVerifier);
 
         if (tokenResult.success && tokenResult.token) {
-          // Fetch user information
           const userInfo = await this.fetchUserInfo(tokenResult.token);
-          
-          // Store token and user data securely
           await storage.saveToken(tokenResult.token);
           await storage.saveUser(userInfo);
 
@@ -91,16 +109,10 @@ export const authService = {
         }
 
         return tokenResult;
-      } else if (result.type === 'error') {
-        return {
-          success: false,
-          error: result.error?.message || 'OAuth authorization failed',
-        };
+      } else if (result.type === 'cancel' || result.type === 'dismiss') {
+        return { success: false, error: 'OAuth authorization was cancelled' };
       } else {
-        return {
-          success: false,
-          error: 'OAuth authorization was cancelled',
-        };
+        return { success: false, error: 'OAuth authorization failed' };
       }
     } catch (error) {
       console.error('OAuth flow error:', error);
@@ -112,7 +124,8 @@ export const authService = {
   },
 
   /**
-   * Exchange authorization code for access token
+   * Exchange authorization code for access token via BFF.
+   * The client ID is injected server-side.
    */
   async exchangeCodeForToken(
     code: string,
@@ -121,31 +134,36 @@ export const authService = {
     try {
       const runtimeConfig = await getGlobalRuntimeConfig();
       const { oauth2 } = config;
-      const giteaUrl = runtimeConfig.giteaUrl;
+      const conductorUrl = runtimeConfig.conductorUrl;
 
-      // Use the live client ID (already resolved and cached in config by startOAuthFlow)
-      const { oauth2: currentOAuth2 } = config;
-      const response = await axios.post(
-        `${giteaUrl}/login/oauth/access_token`,
-        {
-          client_id: currentOAuth2.clientId,
+      const response = await fetch(`${conductorUrl}/auth/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
           code,
           code_verifier: codeVerifier,
-          grant_type: 'authorization_code',
-          redirect_uri: currentOAuth2.redirectUri,
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-        }
-      );
+          redirect_uri: oauth2.redirectUri,
+        }),
+      });
 
-      if (response.data.access_token) {
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        console.error(`Token exchange error: ${response.status}`, errorBody);
+        return {
+          success: false,
+          error: errorBody.error || 'Token exchange failed',
+        };
+      }
+
+      const data = await response.json();
+
+      if (data.access_token) {
         return {
           success: true,
-          token: response.data.access_token,
+          token: data.access_token,
         };
       }
 
@@ -163,14 +181,14 @@ export const authService = {
   },
 
   /**
-   * Fetch user information from Gitea using access token
+   * Fetch user information via BFF /api/auth/user endpoint
    */
   async fetchUserInfo(token: string): Promise<User> {
     try {
       const runtimeConfig = await getGlobalRuntimeConfig();
-      const giteaUrl = runtimeConfig.giteaUrl;
+      const conductorUrl = runtimeConfig.conductorUrl;
 
-      const response = await axios.get(`${giteaUrl}/api/v1/user`, {
+      const response = await axios.get(`${conductorUrl}/auth/user`, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
@@ -179,9 +197,9 @@ export const authService = {
 
       return {
         id: response.data.id,
-        username: response.data.login || response.data.username,
+        username: response.data.username,
         email: response.data.email,
-        full_name: response.data.full_name || response.data.login,
+        full_name: response.data.full_name,
         avatar_url: response.data.avatar_url,
       };
     } catch (error) {

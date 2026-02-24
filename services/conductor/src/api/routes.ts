@@ -6,6 +6,7 @@ import { Express } from "express";
 import { readFile } from "fs/promises";
 import webhooksRouter from "./webhooks.js";
 import chatRouter from "./chat.js";
+import authRouter from "./auth.js";
 import mobileRouter from "./mobile.js";
 import internalRouter from "./internal.js";
 import { logger } from "../utils/logger.js";
@@ -32,8 +33,11 @@ export function registerRoutes(app: Express) {
   // Mobile and chat APIs
   app.use("/api/chat", chatRouter);
 
+  // BFF auth endpoints (server-side OAuth2 – clients never need the client ID)
+  app.use("/api/auth", authRouter);
+
   // Public client configuration (no auth required)
-  // Returns non-sensitive config the mobile app needs before authenticating
+  // Kept for backward compatibility; new clients should use /api/auth/* instead
   app.get("/api/config", async (_req, res) => {
     try {
       const oauth2ClientId = await readOAuth2ClientId();

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { config, fetchOAuth2ClientId } from '../config';
+import { config } from '../config';
 import { storage } from './storage';
 
 /**
@@ -176,45 +176,50 @@ async function generateCodeChallenge(verifier) {
 
 export const authService = {
   /**
-   * Start OAuth2 authorization flowgenerate
-   * This redirects the user to Gitea for authentication
+   * Start OAuth2 authorization flow
+   * Uses the BFF /api/auth/authorize endpoint so the client
+   * never needs to know the OAuth2 client ID.
    */
   async startOAuthFlow() {
     try {
-      const { oauth2, giteaUrl } = config;
-
-      // Discover the live OAuth2 client ID from the conductor
-      const clientId = await fetchOAuth2ClientId(config.conductorUrl);
-      if (!clientId) {
-        return {
-          success: false,
-          error: 'OAuth2 Client ID is not configured. Is the platform running?',
-        };
-      }
+      const { oauth2, conductorUrl } = config;
 
       // Generate PKCE challenge for enhanced security
       const codeVerifier = generateCodeVerifier();
       const codeChallenge = await generateCodeChallenge(codeVerifier);
+      const state = generateUUID();
 
-      // Store code verifier for later use in callback
+      // Store code verifier and state for later use in callback
       sessionStorage.setItem('oauth_code_verifier', codeVerifier);
-      sessionStorage.setItem('oauth_state', generateUUID());
+      sessionStorage.setItem('oauth_state', state);
 
-      // Build authorization URL
+      // Ask the BFF to build the authorization URL (client ID is injected server-side)
       const params = new URLSearchParams({
-        client_id: clientId,
         redirect_uri: oauth2.redirectUri,
-        response_type: 'code',
-        scope: oauth2.scopes.join(' '),
-        state: sessionStorage.getItem('oauth_state'),
         code_challenge: codeChallenge,
-        code_challenge_method: 'S256',
+        state,
+        scopes: oauth2.scopes.join(' '),
       });
 
-      const authUrl = `${giteaUrl}/login/oauth/authorize?${params.toString()}`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`${conductorUrl}/auth/authorize?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
 
-      // Redirect to authorization URL
-      window.location.href = authUrl;
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        return {
+          success: false,
+          error: body.error || `BFF authorize failed: ${res.status}`,
+        };
+      }
+
+      const { authorizeUrl } = await res.json();
+
+      // Redirect to Gitea authorization URL
+      window.location.href = authorizeUrl;
 
       return { success: true };
     } catch (error) {
@@ -228,7 +233,7 @@ export const authService = {
 
   /**
    * Handle OAuth callback
-   * Extracts authorization code and exchanges it for access token
+   * Extracts authorization code and exchanges it for access token via BFF
    */
   async handleOAuthCallback() {
     try {
@@ -269,10 +274,7 @@ export const authService = {
         };
       }
 
-      // Refresh the OAuth2 client ID from the API (in-memory config is lost on page reload)
-      await fetchOAuth2ClientId();
-
-      // Exchange code for token
+      // Exchange code for token via the BFF (client ID is injected server-side)
       const tokenResult = await this.exchangeCodeForToken(code, codeVerifier);
 
       // Clean up session storage
@@ -305,33 +307,39 @@ export const authService = {
   },
 
   /**
-   * Exchange authorization code for access token
+   * Exchange authorization code for access token via BFF
+   * The client ID is injected server-side; the frontend only sends
+   * the code, code_verifier, and redirect_uri.
    */
   async exchangeCodeForToken(code, codeVerifier) {
     try {
-      const { oauth2, giteaUrl } = config;
+      const { oauth2, conductorUrl } = config;
 
-      const response = await axios.post(
-        `${giteaUrl}/login/oauth/access_token`,
-        {
-          client_id: oauth2.clientId,
+      const response = await fetch(`${conductorUrl}/auth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           code,
           code_verifier: codeVerifier,
-          grant_type: 'authorization_code',
           redirect_uri: oauth2.redirectUri,
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-        }
-      );
+        }),
+      });
 
-      if (response.data.access_token) {
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        console.error(`Token exchange error: ${response.status}`, errorBody);
+        return {
+          success: false,
+          error: errorBody.error || `Token exchange failed: ${response.status} ${response.statusText}`,
+        };
+      }
+
+      const data = await response.json();
+      
+      if (data.access_token) {
         return {
           success: true,
-          token: response.data.access_token,
+          token: data.access_token,
         };
       }
 
@@ -349,13 +357,13 @@ export const authService = {
   },
 
   /**
-   * Fetch user information from Gitea using access token
+   * Fetch user information via BFF /api/auth/user endpoint
    */
   async fetchUserInfo(token) {
     try {
-      const { giteaUrl } = config;
+      const { conductorUrl } = config;
 
-      const response = await axios.get(`${giteaUrl}/api/v1/user`, {
+      const response = await axios.get(`${conductorUrl}/auth/user`, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
@@ -364,9 +372,9 @@ export const authService = {
 
       return {
         id: response.data.id,
-        username: response.data.login || response.data.username,
+        username: response.data.username,
         email: response.data.email,
-        full_name: response.data.full_name || response.data.login,
+        full_name: response.data.full_name,
         avatar_url: response.data.avatar_url,
       };
     } catch (error) {

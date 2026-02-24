@@ -3,6 +3,10 @@ import { Platform } from 'react-native';
 
 // Configuration for OAuth and API endpoints
 // These can be overridden via app.json's extra field (Constants.expoConfig.extra)
+//
+// The OAuth2 client ID is managed server-side (BFF pattern).
+// The mobile app calls /api/auth/* endpoints and never needs
+// to know or fetch the client ID.
 
 const extra = Constants.expoConfig?.extra || {};
 
@@ -35,11 +39,8 @@ export const config = {
   giteaUrl: GITEA_URL,
   conductorUrl: CONDUCTOR_URL,
   
-  // OAuth2 Client Configuration
-  // The clientId from app.json is used as a fallback.
-  // At runtime the app fetches the live value from GET /api/config.
+  // OAuth2 Configuration (client ID is handled server-side via BFF)
   oauth2: {
-    clientId: extra.oauth2ClientId || '',
     redirectUri: extra.oauth2RedirectUri || 'cuemarshal://oauth',
     scopes: [
       'read:user',
@@ -54,38 +55,9 @@ export const config = {
   appScheme: 'cuemarshal',
 };
 
-/**
- * Fetch the OAuth2 client ID from the conductor's /api/config endpoint.
- * Falls back to the value baked into app.json if the request fails.
- */
-export async function fetchOAuth2ClientId(conductorUrl?: string): Promise<string> {
-  const baseApi = conductorUrl || CONDUCTOR_URL;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`${baseApi}/config`, { signal: controller.signal });
-    clearTimeout(timeout);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.oauth2ClientId) {
-        // Update the in-memory config so subsequent reads see the live value
-        config.oauth2.clientId = data.oauth2ClientId;
-        return data.oauth2ClientId;
-      }
-    }
-  } catch {
-    // Network error or timeout — fall through to fallback
-  }
-  return config.oauth2.clientId;
-}
-
 // Validate configuration (synchronous, checks current in-memory values)
 export function validateConfig(): { isValid: boolean; errors: string[] } {
   const errors: string[] = [];
-  
-  if (!config.oauth2.clientId) {
-    errors.push('OAuth2 Client ID is not configured');
-  }
   
   if (!config.baseUrl) {
     errors.push('Base URL is not configured');
