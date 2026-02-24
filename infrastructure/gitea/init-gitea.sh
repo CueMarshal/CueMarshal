@@ -277,6 +277,13 @@ create_repo() {
 
 import_source() {
     echo "[11/17] Importing source code into Gitea..."
+
+    if [ ! -d "/source" ]; then
+        echo "  /source directory not found — skipping source import"
+        echo "  Push source manually: git remote add gitea <GITEA_URL>/${ORG_NAME}/cuemarshal.git && git push"
+        return 0
+    fi
+
     BOT_TOKEN=$(cat "${TOKEN_DIR}/bot_token")
 
     TMPDIR=$(mktemp -d)
@@ -295,7 +302,8 @@ import_source() {
     git add -A
     git diff --cached --quiet || git commit -m "Sync workflows to .gitea/workflows for Gitea Actions"
 
-    git remote set-url origin "http://cuemarshal-bot:${BOT_TOKEN}@gitea:3000/${ORG_NAME}/cuemarshal.git"
+    GITEA_HOST=$(echo "${GITEA_URL}" | sed 's|http://||')
+    git remote set-url origin "http://cuemarshal-bot:${BOT_TOKEN}@${GITEA_HOST}/${ORG_NAME}/cuemarshal.git"
     git push --force origin HEAD:main
 
     cd /
@@ -435,8 +443,8 @@ create_oauth2_app() {
     echo "[14/17] Creating OAuth2 application for mobile app & web..."
     ADMIN_TOKEN=$(cat "${TOKEN_DIR}/admin_token")
 
-    # Determine the web redirect URI based on GITEA_URL
-    WEB_REDIRECT_URI="${GITEA_URL}/oauth/callback"
+    # Determine the web redirect URI based on external URL (not internal cluster URL)
+    WEB_REDIRECT_URI="${GITEA_EXTERNAL_URL:-${GITEA_URL}}/oauth/callback"
 
     # Check if the OAuth2 app already exists
     EXISTING=$(curl -sf \
