@@ -21,17 +21,25 @@ export class MCPRegistry {
   private connections: Map<string, MCPConnection> = new Map();
   private toolToServer: Map<string, string> = new Map();
 
+  private static OPTIONAL_SERVERS = new Set(["sonar"]);
+
   async initialize(): Promise<void> {
     logger.info("Initializing MCP server connections");
 
-    // Connect to all MCP servers
-    await Promise.all([
-      this.connectToServer("gitea", config.mcpGiteaUrl),
-      this.connectToServer("conductor", config.mcpConductorUrl),
-      this.connectToServer("system", config.mcpSystemUrl),
-      this.connectToServer("vector", config.mcpVectorUrl),
-      this.connectToServer("sonar", config.mcpSonarUrl),
-    ]);
+    const servers: Array<{ name: string; url: string }> = [
+      { name: "gitea", url: config.mcpGiteaUrl },
+      { name: "conductor", url: config.mcpConductorUrl },
+      { name: "system", url: config.mcpSystemUrl },
+      { name: "vector", url: config.mcpVectorUrl },
+    ];
+
+    if (config.mcpSonarUrl) {
+      servers.push({ name: "sonar", url: config.mcpSonarUrl });
+    }
+
+    await Promise.all(
+      servers.map(({ name, url }) => this.connectToServer(name, url))
+    );
 
     logger.info(
       { toolCount: this.toolToServer.size },
@@ -55,7 +63,6 @@ export class MCPRegistry {
       await client.connect(transport);
       logger.info({ server: name, url }, "Connected to MCP server");
 
-      // Discover tools
       const response = await client.listTools(undefined, { timeout: 5000 });
 
       const tools = new Map();
@@ -70,6 +77,10 @@ export class MCPRegistry {
         "Discovered MCP tools"
       );
     } catch (error) {
+      if (MCPRegistry.OPTIONAL_SERVERS.has(name)) {
+        logger.warn({ server: name, url }, "Optional MCP server unavailable — skipping");
+        return;
+      }
       logger.error({ error, server: name, url }, "Failed to connect to MCP server");
       throw error;
     }

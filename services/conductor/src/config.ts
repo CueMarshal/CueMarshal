@@ -17,7 +17,7 @@ const ConfigSchema = z.object({
   mcpConductorUrl: z.string().url(),
   mcpSystemUrl: z.string().url(),
   mcpVectorUrl: z.string().url(),
-  mcpSonarUrl: z.string().url(),
+  mcpSonarUrl: z.string().url().optional(),
   webhookSecret: z.string(),
   conductorSecret: z.string(),
   conductorOrg: z.string().default("cuemarshal"),
