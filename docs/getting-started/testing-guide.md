@@ -65,6 +65,8 @@ echo "127.0.0.1 demo.local" | sudo tee -a /etc/hosts
 
 ### Deploy CueMarshal
 
+The recommended approach is to use the `deploy-to-k3d.sh` script, which builds images, loads them into k3d, and deploys the Helm chart in one step:
+
 ```bash
 cd ~/source/repos/verbose-octo
 
@@ -75,25 +77,37 @@ export KUBECONFIG=~/.kube/k3d-dev-config
 # Install Helm dependencies
 cd infrastructure/helm/cuemarshal
 helm dependency update
-
-# Deploy CueMarshal using local-values.yaml
 cd ../../../
-helm install dev-workspace ./infrastructure/helm/cuemarshal \
-  --namespace cuemarshal-ws-dev \
-  --create-namespace \
-  --values ./infrastructure/helm/cuemarshal/local-values.yaml
+
+# Deploy using the helper script (builds images + loads into k3d + helm upgrade)
+bash scripts/deploy-to-k3d.sh dev
 
 # Watch pods starting
 kubectl get pods -n cuemarshal-ws-dev --watch
 ```
 
+Alternatively, deploy manually (requires images already loaded into k3d):
+
+```bash
+helm upgrade --install dev-workspace ./infrastructure/helm/cuemarshal \
+  --namespace cuemarshal-ws-dev \
+  --create-namespace \
+  --values ./infrastructure/helm/cuemarshal/local-values.yaml \
+  --set "image.registry=ghcr.io/cuemarshal" \
+  --set "image.tag=latest" \
+  --set "image.pullPolicy=IfNotPresent" \
+  --wait --timeout 5m
+```
+
+**Note:** The init-gitea job runs as a Helm `post-install,post-upgrade` hook. It executes after all core resources are ready and populates the OAuth2 client ID ConfigMap. This ensures the OAuth2 configuration survives `helm upgrade` operations.
+
 ### Expected Result
 
 Full deployment with all core services running:
 - PostgreSQL StatefulSet with persistence
-- Redis Deployment 
-- Gitea with initialization job
-- Conductor service with proper configuration
+- Redis Deployment
+- Gitea with initialization hook (runs post-install/post-upgrade)
+- Conductor service with BFF auth endpoints and OAuth2 client ID
 - Gateway service
 - Landing page accessible via Traefik ingress
 - MCP (Model Context Protocol) servers
@@ -109,7 +123,6 @@ kubectl get all -n cuemarshal-ws-dev
 # Verify core services are healthy
 kubectl get statefulset -n cuemarshal-ws-dev  # postgres, runner
 kubectl get deployment -n cuemarshal-ws-dev   # All other services
-kubectl get jobs -n cuemarshal-ws-dev         # init-gitea should be Completed
 
 # Check ingress is properly configured with traefik
 kubectl get ingress -n cuemarshal-ws-dev
@@ -119,8 +132,18 @@ kubectl describe ingress dev-workspace-cuemarshal -n cuemarshal-ws-dev
 curl -s http://demo.local | grep -q "CueMarshal" && echo "✓ Landing page loads"
 curl -s -w "HTTP %{http_code}\n" http://demo.local
 
+# Verify OAuth2 client ID is populated (should return a UUID, not empty)
+kubectl get configmap -n cuemarshal-ws-dev dev-workspace-cuemarshal-oauth-config \
+  -o jsonpath='{.data.oauth2_client_id}' && echo ""
+
+# Verify BFF auth endpoint is working (should return "Missing required query parameters", not "not available")
+curl -s http://demo.local/api/auth/authorize | grep -q "Missing required" \
+  && echo "✓ BFF auth endpoint working" \
+  || echo "✗ BFF auth endpoint not ready"
+
 # Check logs if needed
 kubectl logs -n cuemarshal-ws-dev deployment/dev-workspace-cuemarshal-landing
+kubectl logs -n cuemarshal-ws-dev deployment/dev-workspace-cuemarshal-conductor
 
 # Check database is initialized
 kubectl get statefulset -n cuemarshal-ws-dev dev-workspace-cuemarshal-postgres
@@ -247,6 +270,73 @@ curl http://config.demo.local       # Conductor configuration
 - [ ] Can view logs: `kubectl logs -f -n cuemarshal-ws-dev deployment/dev-workspace-cuemarshal-landing`
 - [ ] Database is initialized: `kubectl exec -n cuemarshal-ws-dev statefulset/dev-workspace-cuemarshal-postgres -- psql -U postgres -l`
 
+## Test 6: OAuth2 Login Flow (k3d Deployment)
+
+### Prerequisites
+- CueMarshal deployed to k3d (see Test 2)
+- Landing page accessible at http://demo.local
+
+### Authentication Architecture
+
+The platform uses a **BFF (Backend For Frontend)** pattern for OAuth2 authentication:
+
+1. **Frontend** (landing service) never has direct access to the OAuth2 client ID
+2. **Conductor** reads the client ID from `/tokens/oauth2_client_id` (mounted from the `oauth-config` ConfigMap)
+3. The init-gitea Helm hook creates the OAuth2 app in Gitea and writes the client ID to the ConfigMap
+4. PKCE (S256) is used for the authorization code flow, with a JavaScript SHA-256 fallback for non-HTTPS contexts
+
+### Login Flow Steps
+
+1. User clicks "Login to Platform" on the landing page
+2. Frontend calls `GET /api/auth/authorize` with PKCE code_challenge, redirect_uri, and state
+3. Conductor injects the OAuth2 client ID server-side and returns the full Gitea authorize URL
+4. Browser redirects to Gitea's OAuth consent page (`/login/oauth/authorize`)
+5. If not logged in, Gitea redirects to `/user/login` first
+6. After login + consent, Gitea redirects to `/oauth/callback?code=...&state=...`
+7. Frontend calls `POST /api/auth/token` to exchange the code for an access token (via BFF)
+8. Frontend calls `GET /api/auth/user` to fetch user info with the token
+9. User lands on the authenticated dashboard
+
+### Verification Checklist
+
+```bash
+# 1. Verify the OAuth2 client ID is populated
+kubectl get configmap -n cuemarshal-ws-dev dev-workspace-cuemarshal-oauth-config \
+  -o jsonpath='{.data.oauth2_client_id}' && echo ""
+# Expected: a UUID like 28d518fd-4b46-40a0-a806-3069f39a78fa
+
+# 2. Verify the BFF auth endpoint responds correctly
+curl -s http://demo.local/api/auth/authorize
+# Expected: {"error":"Missing required query parameters: redirect_uri, code_challenge, state"}
+# NOT: {"error":"OAuth2 client ID is not available. Platform may still be initializing."}
+
+# 3. Verify the legacy config endpoint shows the client ID
+curl -s http://demo.local/api/config
+# Expected: {"oauth2ClientId":"28d518fd-..."}
+# NOT: {"oauth2ClientId":null}
+
+# 4. Get admin credentials for manual login testing
+kubectl get secret -n cuemarshal-ws-dev dev-workspace-cuemarshal-secrets \
+  -o jsonpath='{.data.gitea-admin-password}' | base64 -d && echo ""
+
+# 5. Verify the OAuth2 app exists in Gitea
+ADMIN_TOKEN=$(kubectl exec -n cuemarshal-ws-dev dev-workspace-cuemarshal-gitea-0 -- \
+  su git -c 'gitea admin user generate-access-token --username cuemarshal-admin --token-name verify-oauth --raw --scopes all' 2>/dev/null)
+curl -s -H "Authorization: token $ADMIN_TOKEN" http://demo.local/api/v1/user/applications/oauth2
+# Expected: array with a "CueMarshal" application entry
+```
+
+Manual browser test:
+- [ ] Navigate to http://demo.local
+- [ ] Click "Login to Platform"
+- [ ] Redirected to Gitea sign-in page (`/user/login`)
+- [ ] Enter admin credentials and click "Sign In"
+- [ ] Gitea shows OAuth consent page: "Authorize CueMarshal to access your account?"
+- [ ] Click "Authorize Application"
+- [ ] Redirected back to landing page dashboard (authenticated)
+- [ ] Username appears in top-right corner with "Logout" button
+- [ ] Agent Activity panel shows all agents (Marshal, Ava, Dave, etc.)
+
 ## Current Test Coverage
 
 ### ✅ What Can Be Tested Now
@@ -256,12 +346,17 @@ curl http://config.demo.local       # Conductor configuration
 4. Management API locally (basic routes)
 5. Onboarding web wizard (3 screens) locally
 6. Helm chart structure and validation (`helm lint`)
-7. **Full Helm deployment to k3d with traefik** ✨ NEW
+7. **Full Helm deployment to k3d with traefik**
    - All core services (postgres, redis, gitea, conductor, gateway, landing, mcp-servers, runner)
    - Traefik ingress routing to landing service
    - Service discovery and inter-pod communication
-   - Init jobs (Gitea initialization)
+   - Init-gitea Helm hook (post-install/post-upgrade)
    - Local development with hot-reload
+8. **OAuth2 BFF login flow (end-to-end)**
+   - Landing page "Login to Platform" button
+   - BFF auth endpoints (`/api/auth/authorize`, `/api/auth/token`, `/api/auth/user`)
+   - Gitea OAuth consent and authorization code exchange with PKCE
+   - Authenticated dashboard with agent activity
 
 ### 🚧 What Needs More Work to Test
 1. **Nginx-ingress controller** - Has Lua-based backend discovery issues; use **traefik instead** (k3d built-in)
@@ -325,13 +420,47 @@ ingress-nginx:
 
 ### k3d Issues
 - **Pods pending**: Check storage with `kubectl get pvc -n cuemarshal-ws-dev`
-- **ImagePullBackOff**: Images need to be in registry or loaded into k3d with `k3d image import`
-- **Ingress not working**: 
+- **ImagePullBackOff**: Images need to be in registry or loaded into k3d with `k3d image import`. Always use `deploy-to-k3d.sh` which handles image building and loading automatically. Running `helm upgrade` alone without loading images first will cause this error.
+- **Ingress not working**:
   - Verify traefik is running: `kubectl get pods -n kube-system | grep traefik`
   - Check ingress status: `kubectl describe ingress -n cuemarshal-ws-dev`
   - Verify /etc/hosts has `127.0.0.1 demo.local`
 - **404 responses from ingress**: Likely backend service discovery issue - use traefik instead of nginx-ingress
 - **LoadBalancer service pending**: k3d should auto-assign EXTERNAL-IP with traefik; if not, restart services
+
+### OAuth2 / Authentication Issues
+
+- **Login returns 503 or "OAuth2 client ID is not available"**: The `oauth-config` ConfigMap is empty. The init-gitea Helm hook may not have completed successfully. Check and fix:
+  ```bash
+  # Check if ConfigMap has a value
+  kubectl get configmap -n cuemarshal-ws-dev dev-workspace-cuemarshal-oauth-config \
+    -o jsonpath='{.data.oauth2_client_id}' && echo ""
+
+  # If empty, retrieve the client ID from Gitea and patch manually
+  ADMIN_TOKEN=$(kubectl exec -n cuemarshal-ws-dev dev-workspace-cuemarshal-gitea-0 -- \
+    su git -c 'gitea admin user generate-access-token --username cuemarshal-admin --token-name fix-oauth --raw --scopes all' 2>/dev/null)
+  CLIENT_ID=$(curl -s -H "Authorization: token $ADMIN_TOKEN" \
+    http://demo.local/api/v1/user/applications/oauth2 | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['client_id'])")
+
+  # Patch the ConfigMap
+  kubectl patch configmap -n cuemarshal-ws-dev dev-workspace-cuemarshal-oauth-config \
+    --type merge -p "{\"data\":{\"oauth2_client_id\":\"$CLIENT_ID\"}}"
+
+  # Restart conductor to pick up the new value
+  kubectl delete pod -n cuemarshal-ws-dev -l app.kubernetes.io/name=cuemarshal,component=conductor
+  ```
+
+- **`/api/config` returns `{"oauth2ClientId":null}`**: Same root cause as above -- the conductor cannot read the client ID from `/tokens/oauth2_client_id`. Follow the manual patch steps.
+
+- **Gitea login page appears but OAuth callback fails**: Check that the OAuth2 app in Gitea has the correct redirect URI (`http://demo.local/oauth/callback`). Verify with:
+  ```bash
+  curl -s -H "Authorization: token $ADMIN_TOKEN" \
+    http://demo.local/api/v1/user/applications/oauth2 | python3 -m json.tool
+  ```
+
+- **`crypto.subtle not available` console warning**: Expected on HTTP (non-HTTPS) contexts. The frontend has a JavaScript SHA-256 fallback for PKCE code challenges. This does not affect functionality.
+
+- **`crypto.randomUUID not available` console warning**: Expected on HTTP contexts. The frontend uses a fallback UUID generator. This does not affect functionality.
 
 ### Management API Issues
 - **Connection refused**: Check DATABASE_URL points to running postgres
