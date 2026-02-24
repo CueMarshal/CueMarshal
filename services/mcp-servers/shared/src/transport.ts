@@ -64,6 +64,13 @@ export async function startDualTransportServer(
         transports.delete(transport.sessionId);
       });
 
+      // MCP Server only supports one active transport; disconnect the
+      // previous one before attaching the new connection.
+      try {
+        await server.close();
+      } catch {
+        // No existing transport to close
+      }
       await server.connect(transport);
     });
     
