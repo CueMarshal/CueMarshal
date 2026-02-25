@@ -64,8 +64,10 @@ Handles:
   - External registry: ghcr.io/cuemarshal/conductor:latest
 */}}
 {{- define "cuemarshal.image" -}}
-{{- $registry := .Values.image.registry | trimSuffix "/" }}
-{{- $tag := .Values.image.tag | default "latest" }}
+{{- $componentValues := index .Values .component | default dict }}
+{{- $componentImage := get $componentValues "image" | default dict }}
+{{- $registry := (get $componentImage "registry") | default .Values.image.registry | trimSuffix "/" }}
+{{- $tag := (get $componentImage "tag") | default .Values.image.tag | default "latest" }}
 {{- if $registry }}
 {{- printf "%s/cuemarshal/%s:%s" $registry .component $tag }}
 {{- else }}

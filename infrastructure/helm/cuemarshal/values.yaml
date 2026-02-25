@@ -124,6 +124,10 @@ gateway:
 
 # Conductor
 conductor:
+  image:
+    tag: ""
+    registry: ""
+  oauth2ClientId: ""
   resources:
     requests:
       memory: "1Gi"
@@ -134,6 +138,9 @@ conductor:
 
 # Landing page
 landing:
+  image:
+    tag: ""
+    registry: ""
   resources:
     requests:
       memory: "128Mi"

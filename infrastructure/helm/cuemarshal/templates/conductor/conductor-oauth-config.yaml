@@ -6,4 +6,4 @@ metadata:
     {{- include "cuemarshal.labels" . | nindent 4 }}
     component: conductor
 data:
-  oauth2_client_id: ""
+  oauth2_client_id: {{ .Values.conductor.oauth2ClientId | default "" | quote }}

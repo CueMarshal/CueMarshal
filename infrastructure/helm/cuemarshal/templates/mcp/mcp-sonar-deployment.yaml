@@ -8,6 +8,8 @@ metadata:
     component: mcp-sonar
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
