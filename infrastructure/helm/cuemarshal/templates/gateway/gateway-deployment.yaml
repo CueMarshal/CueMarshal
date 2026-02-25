@@ -24,7 +24,7 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
         - |
-          export DATABASE_URL="postgresql://{{ .Values.postgres.user | default "cuemarshal" }}:${POSTGRES_PASSWORD}@{{ include "cuemarshal.fullname" . }}-postgres:5432/{{ .Values.postgres.database | default "cuemarshal" }}"
+          export DATABASE_URL="postgresql://{{ .Values.postgres.user | default "cuemarshal" }}:${POSTGRES_PASSWORD}@{{ include "cuemarshal.fullname" . }}-postgres:5432/litellm"
           export REDIS_URL="redis://:${REDIS_PASSWORD}@{{ include "cuemarshal.fullname" . }}-redis:6379"
           exec litellm --config /app/config.yaml --port 80 --num_workers 1
         env:
