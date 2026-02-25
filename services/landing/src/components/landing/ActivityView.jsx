@@ -8,7 +8,7 @@ const AGENTS = [
   { id: 'dev', name: 'Dave', species: 'Beaver Developer', avatar: '/images/avatars/dave.png', color: 'bg-green-600', textClass: 'text-green-600', desc: 'Industrious builder' },
   { id: 'reviewer', name: 'Reese', species: 'Bald Eagle Reviewer', avatar: '/images/avatars/reese.png', color: 'bg-amber-500', textClass: 'text-amber-600', desc: 'Laser-sharp critic' },
   { id: 'tester', name: 'Tess', species: 'Raccoon Tester', avatar: '/images/avatars/tess.png', color: 'bg-purple-500', textClass: 'text-purple-600', desc: 'Clever bug washer' },
-  { id: 'devops', name: 'Devin', species: 'Octopus DevOps', emoji: '\u{1F419}', color: 'bg-cyan-600', textClass: 'text-cyan-600', desc: 'Master multi-tasker' },
+  { id: 'devops', name: 'Devin', species: 'Octopus DevOps', avatar: '/images/avatars/devin.png', color: 'bg-cyan-600', textClass: 'text-cyan-600', desc: 'Master multi-tasker' },
   { id: 'writer', name: 'Dot', species: 'Parrot Tech Writer', avatar: '/images/avatars/dot.png', color: 'bg-rose-500', textClass: 'text-rose-600', desc: 'Explains it clearly' },
   { id: 'linter', name: 'Linton', species: 'Siamese Cat Linter', avatar: '/images/avatars/linton.png', color: 'bg-slate-700', textClass: 'text-slate-700', desc: 'Picky perfectionist' },
 ];

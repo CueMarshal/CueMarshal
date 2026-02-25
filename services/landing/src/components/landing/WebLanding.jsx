@@ -59,7 +59,7 @@ export default function WebLanding() {
             </Button>
 
             <div className="mt-16 grid grid-cols-3 md:grid-cols-7 gap-4 opacity-60">
-              {['marshal.png', 'ava.png', 'dave.png', 'reese.png', 'tess.png', 'dot.png', 'linton.png'].map((avatar, i) => (
+              {['marshal.png', 'ava.png', 'dave.png', 'reese.png', 'tess.png', 'devin.png', 'dot.png', 'linton.png'].map((avatar, i) => (
                 <div key={i} className="flex flex-col items-center">
                   <img src={`/images/avatars/${avatar}`} alt="Agent" className="w-16 h-16 rounded-full border-2 border-white/30" />
                 </div>
