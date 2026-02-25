@@ -203,7 +203,7 @@ export const authService = {
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch(`${conductorUrl}/api/auth/authorize?${params.toString()}`, {
+      const res = await fetch(`${conductorUrl}/auth/authorize?${params.toString()}`, {
         signal: controller.signal,
       });
       clearTimeout(timeout);
@@ -315,7 +315,7 @@ export const authService = {
     try {
       const { oauth2, conductorUrl } = config;
 
-      const response = await fetch(`${conductorUrl}/api/auth/token`, {
+      const response = await fetch(`${conductorUrl}/auth/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -363,7 +363,7 @@ export const authService = {
     try {
       const { conductorUrl } = config;
 
-      const response = await axios.get(`${conductorUrl}/api/auth/user`, {
+      const response = await axios.get(`${conductorUrl}/auth/user`, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
