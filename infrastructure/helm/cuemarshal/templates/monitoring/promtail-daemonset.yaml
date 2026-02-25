@@ -1,0 +1,56 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-promtail
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: promtail
+spec:
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: promtail
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: promtail
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/monitoring/promtail-config.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "cuemarshal.fullname" . }}-promtail
+      containers:
+      - name: promtail
+        image: {{ .Values.monitoring.promtail.image }}
+        args:
+        - -config.file=/etc/promtail/config.yml
+        ports:
+        - name: http
+          containerPort: 9080
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.monitoring.promtail.resources | nindent 10 }}
+        volumeMounts:
+        - name: config
+          mountPath: /etc/promtail
+        - name: pods-log
+          mountPath: /var/log/pods
+          readOnly: true
+        - name: positions
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "cuemarshal.fullname" . }}-promtail-config
+      - name: pods-log
+        hostPath:
+          path: /var/log/pods
+      - name: positions
+        emptyDir: {}
+{{- end }}

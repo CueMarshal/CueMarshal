@@ -1,0 +1,36 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-promtail-config
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: promtail
+data:
+  config.yml: |
+    server:
+      http_listen_port: 9080
+      grpc_listen_port: 0
+
+    positions:
+      filename: /tmp/positions.yaml
+
+    clients:
+      - url: http://{{ include "cuemarshal.fullname" . }}-loki:3100/loki/api/v1/push
+
+    scrape_configs:
+      - job_name: kubernetes-pods
+        static_configs:
+          - targets: [localhost]
+            labels:
+              job: kubernetes-pods
+              namespace: {{ .Release.Namespace }}
+              __path__: /var/log/pods/{{ .Release.Namespace }}_*/*/*.log
+        pipeline_stages:
+          - cri: {}
+          - regex:
+              source: filename
+              expression: '.+/(?P<container>[^/]+)/[0-9]+[.]log'
+          - labels:
+              container:
+{{- end }}

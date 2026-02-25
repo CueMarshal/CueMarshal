@@ -17,6 +17,8 @@ spec:
       labels:
         {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
         component: grafana
+      annotations:
+        checksum/datasources: {{ include (print $.Template.BasePath "/monitoring/grafana-provisioning.yaml") . | sha256sum }}
     spec:
       containers:
       - name: grafana

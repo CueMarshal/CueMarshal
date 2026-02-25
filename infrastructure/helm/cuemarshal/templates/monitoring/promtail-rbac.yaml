@@ -1,0 +1,37 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-promtail
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: promtail
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-promtail
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: promtail
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "nodes/proxy", "services", "endpoints", "pods"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-promtail
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: promtail
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "cuemarshal.fullname" . }}-promtail
+subjects:
+- kind: ServiceAccount
+  name: {{ include "cuemarshal.fullname" . }}-promtail
+  namespace: {{ .Release.Namespace }}
+{{- end }}

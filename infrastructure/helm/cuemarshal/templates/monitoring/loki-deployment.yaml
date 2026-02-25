@@ -1,0 +1,62 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-loki
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: loki
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: loki
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: loki
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/monitoring/loki-config.yaml") . | sha256sum }}
+    spec:
+      containers:
+      - name: loki
+        image: {{ .Values.monitoring.loki.image }}
+        args:
+        - -config.file=/etc/loki/config.yml
+        ports:
+        - name: http
+          containerPort: 3100
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        resources:
+          {{- toYaml .Values.monitoring.loki.resources | nindent 10 }}
+        volumeMounts:
+        - name: config
+          mountPath: /etc/loki
+        - name: data
+          mountPath: /loki
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "cuemarshal.fullname" . }}-loki-config
+      {{- if .Values.monitoring.loki.persistence.enabled }}
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ include "cuemarshal.fullname" . }}-loki
+      {{- else }}
+      - name: data
+        emptyDir: {}
+      {{- end }}
+{{- end }}

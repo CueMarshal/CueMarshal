@@ -17,7 +17,10 @@ spec:
       labels:
         {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
         component: prometheus
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/monitoring/prometheus-config.yaml") . | sha256sum }}
     spec:
+      serviceAccountName: {{ include "cuemarshal.fullname" . }}-prometheus
       containers:
       - name: prometheus
         image: {{ .Values.monitoring.prometheus.image }}
@@ -25,18 +28,36 @@ spec:
         - --config.file=/etc/prometheus/prometheus.yml
         - --storage.tsdb.path=/prometheus
         - --storage.tsdb.retention.time={{ .Values.monitoring.prometheus.retention }}
+        - --web.enable-lifecycle
         ports:
         - name: http
           containerPort: 9090
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 20
         resources:
           {{- toYaml .Values.monitoring.prometheus.resources | nindent 10 }}
-        {{- if .Values.monitoring.prometheus.persistence.enabled }}
         volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+        {{- if .Values.monitoring.prometheus.persistence.enabled }}
         - name: data
           mountPath: /prometheus
         {{- end }}
-      {{- if .Values.monitoring.prometheus.persistence.enabled }}
       volumes:
+      - name: config
+        configMap:
+          name: {{ include "cuemarshal.fullname" . }}-prometheus-config
+      {{- if .Values.monitoring.prometheus.persistence.enabled }}
       - name: data
         persistentVolumeClaim:
           claimName: {{ include "cuemarshal.fullname" . }}-prometheus

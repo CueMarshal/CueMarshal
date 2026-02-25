@@ -222,7 +222,7 @@ data:
           "datasource": "Loki",
           "targets": [
             {
-              "expr": "sum by (container) (count_over_time({job=\"docker\"} |~ \"(?i)error|exception|traceback|failed|critical\" [15m]))",
+              "expr": "sum by (container) (count_over_time({job=~\"docker|kubernetes-pods\"} |~ \"(?i)error|exception|traceback|failed|critical\" [15m]))",
               "refId": "A"
             }
           ],
