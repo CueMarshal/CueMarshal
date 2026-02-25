@@ -48,9 +48,13 @@ async function main() {
     process.exit(1);
   }
 
-  // Initialize MCP server connections
-  await mcpRegistry.initialize();
-  logger.info("✓ MCP servers connected");
+  // Initialize MCP server connections (non-fatal — reconnects in background)
+  try {
+    await mcpRegistry.initialize();
+    logger.info("✓ MCP servers connected (or connecting in background)");
+  } catch (error) {
+    logger.warn({ error }, "MCP initialization had errors — health monitor will retry");
+  }
 
   // Create Express app
   const app = express();

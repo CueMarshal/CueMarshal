@@ -476,7 +476,9 @@ create_oauth2_app() {
         echo "    - Web: ${WEB_REDIRECT_URI}"
         
         # Update the ConfigMap so conductor can read it
-        # Use Kubernetes API with curl (no kubectl needed)
+        # Use Kubernetes server-side apply with fieldManager=helm so that
+        # ownership stays consistent with Helm and future upgrades don't
+        # hit field-manager conflicts.
         if [ -n "${CONFIGMAP_NAME}" ] && [ -f "/var/run/secrets/kubernetes.io/serviceaccount/token" ]; then
             echo "  Updating ConfigMap with OAuth2 client ID..."
             
@@ -484,13 +486,14 @@ create_oauth2_app() {
             KUBE_NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
             KUBE_API="https://kubernetes.default.svc"
             
-            # Patch the ConfigMap
+            # Server-side apply patch — fieldManager=helm keeps ownership
+            # aligned with Helm so subsequent helm upgrades don't conflict.
             curl -sf -X PATCH \
                 -H "Authorization: Bearer ${KUBE_TOKEN}" \
-                -H "Content-Type: application/strategic-merge-patch+json" \
+                -H "Content-Type: application/apply-patch+yaml" \
                 --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
-                "${KUBE_API}/api/v1/namespaces/${KUBE_NAMESPACE}/configmaps/${CONFIGMAP_NAME}" \
-                -d "{\"data\":{\"oauth2_client_id\":\"${CLIENT_ID}\"}}" \
+                "${KUBE_API}/api/v1/namespaces/${KUBE_NAMESPACE}/configmaps/${CONFIGMAP_NAME}?fieldManager=helm&force=true" \
+                -d "{\"apiVersion\":\"v1\",\"kind\":\"ConfigMap\",\"metadata\":{\"name\":\"${CONFIGMAP_NAME}\"},\"data\":{\"oauth2_client_id\":\"${CLIENT_ID}\"}}" \
                 2>/dev/null && echo "  ✓ ConfigMap updated successfully" || \
                 echo "  WARNING: Could not update ConfigMap (conductor may not have OAuth client ID)"
         fi
