@@ -1,0 +1,272 @@
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-grafana-datasources
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: grafana
+data:
+  prometheus.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://{{ include "cuemarshal.fullname" . }}-prometheus:9090
+        isDefault: true
+        editable: false
+  loki.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://{{ include "cuemarshal.fullname" . }}-loki:3100
+        isDefault: false
+        editable: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-grafana-dashboard-providers
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: grafana
+data:
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: "CueMarshal Operations"
+        orgId: 1
+        folder: "Operations"
+        type: file
+        disableDeletion: true
+        editable: false
+        options:
+          path: /etc/grafana/provisioning/dashboards/ops
+      - name: "CueMarshal Logs"
+        orgId: 1
+        folder: "Logs"
+        type: file
+        disableDeletion: true
+        editable: false
+        options:
+          path: /etc/grafana/provisioning/dashboards/logs
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-grafana-dashboards-ops
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: grafana
+data:
+  operations-overview.json: |
+    {
+      "uid": "cuemarshal-ops-overview",
+      "title": "Operations Overview",
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "10s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Prometheus Up",
+          "datasource": "Prometheus",
+          "targets": [{"expr": "up{job=\"prometheus\"}", "refId": "A"}],
+          "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Grafana Up",
+          "datasource": "Prometheus",
+          "targets": [{"expr": "up{job=\"grafana\"}", "refId": "A"}],
+          "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0}
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Loki Up",
+          "datasource": "Prometheus",
+          "targets": [{"expr": "up{job=\"loki\"}", "refId": "A"}],
+          "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0}
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Promtail Up",
+          "datasource": "Prometheus",
+          "targets": [{"expr": "up{job=\"promtail\"}", "refId": "A"}],
+          "gridPos": {"h": 4, "w": 4, "x": 12, "y": 0}
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Stack Up",
+          "datasource": "Prometheus",
+          "targets": [{"expr": "sum(up{job=~\"prometheus|grafana|loki|promtail\"})", "refId": "A"}],
+          "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0}
+        },
+        {
+          "id": 6,
+          "type": "stat",
+          "title": "Jobs Scraped",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "count(sum by (job) (up))",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 4, "w": 4, "x": 20, "y": 0}
+        },
+        {
+          "id": 7,
+          "type": "stat",
+          "title": "Targets Down",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum(up == 0)",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 4, "w": 4, "x": 0, "y": 4}
+        },
+        {
+          "id": 8,
+          "type": "stat",
+          "title": "Targets Up",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum(up == 1)",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 4, "w": 4, "x": 4, "y": 4}
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Targets Up (by Job)",
+          "datasource": "Prometheus",
+          "targets": [
+            {"expr": "sum by (job) (up)", "refId": "A"}
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 8, "y": 4}
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "Scrape Duration p95",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(scrape_duration_seconds_bucket[5m])) by (le, job))",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+        },
+        {
+          "id": 11,
+          "type": "timeseries",
+          "title": "Scrape Samples per Second",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum by (job) (rate(scrape_samples_post_metric_relabeling[5m]))",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+        }
+      ]
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-grafana-dashboards-logs
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: grafana
+data:
+  log-signal.json: |
+    {
+      "uid": "cuemarshal-log-signal",
+      "title": "Log Signal",
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "10s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "Error Rate by Container (15m)",
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "sum by (container) (count_over_time({job=\"docker\"} |~ \"(?i)error|exception|traceback|failed|critical\" [15m]))",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "type": "logs",
+          "title": "Conductor Errors",
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "{container=~\".*conductor.*\"} |~ \"(?i)error|exception|traceback|failed|critical\"",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 10, "w": 12, "x": 0, "y": 8}
+        },
+        {
+          "id": 3,
+          "type": "logs",
+          "title": "Gateway Errors",
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "{container=~\".*gateway.*\"} |~ \"(?i)error|exception|traceback|failed|critical\"",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 10, "w": 12, "x": 12, "y": 8}
+        },
+        {
+          "id": 4,
+          "type": "logs",
+          "title": "Runner Errors",
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "{container=~\".*runner-.*\"} |~ \"(?i)error|exception|traceback|failed|critical\"",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 10, "w": 24, "x": 0, "y": 18}
+        }
+      ]
+    }
+{{- end }}

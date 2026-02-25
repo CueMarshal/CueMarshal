@@ -57,13 +57,34 @@ spec:
           containerPort: 3000
         resources:
           {{- toYaml .Values.monitoring.grafana.resources | nindent 10 }}
-        {{- if .Values.monitoring.grafana.persistence.enabled }}
         volumeMounts:
+        - name: datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: dashboard-providers
+          mountPath: /etc/grafana/provisioning/dashboards/dashboards.yml
+          subPath: dashboards.yml
+        - name: dashboards-ops
+          mountPath: /etc/grafana/provisioning/dashboards/ops
+        - name: dashboards-logs
+          mountPath: /etc/grafana/provisioning/dashboards/logs
+        {{- if .Values.monitoring.grafana.persistence.enabled }}
         - name: data
           mountPath: /var/lib/grafana
         {{- end }}
-      {{- if .Values.monitoring.grafana.persistence.enabled }}
       volumes:
+      - name: datasources
+        configMap:
+          name: {{ include "cuemarshal.fullname" . }}-grafana-datasources
+      - name: dashboard-providers
+        configMap:
+          name: {{ include "cuemarshal.fullname" . }}-grafana-dashboard-providers
+      - name: dashboards-ops
+        configMap:
+          name: {{ include "cuemarshal.fullname" . }}-grafana-dashboards-ops
+      - name: dashboards-logs
+        configMap:
+          name: {{ include "cuemarshal.fullname" . }}-grafana-dashboards-logs
+      {{- if .Values.monitoring.grafana.persistence.enabled }}
       - name: data
         persistentVolumeClaim:
           claimName: {{ include "cuemarshal.fullname" . }}-grafana
