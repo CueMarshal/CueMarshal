@@ -55,6 +55,14 @@ export async function startDualTransportServer(
       console.log(`[${options.name}] SSE connection established`);
       
       const transport = new SSEServerTransport("/message", res);
+      
+      // MCP Server only supports one active transport; clean up ALL old sessions
+      // before attaching the new connection to prevent stale session errors
+      if (transports.size > 0) {
+        console.log(`[${options.name}] Cleaning up ${transports.size} old session(s) before new connection`);
+        transports.clear();
+      }
+      
       transports.set(transport.sessionId, transport);
       console.log(`[${options.name}] Session ${transport.sessionId} registered`);
 

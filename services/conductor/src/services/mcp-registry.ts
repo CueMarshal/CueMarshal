@@ -387,6 +387,7 @@ export class MCPRegistry {
       msg.includes("sse") ||
       msg.includes("could not connect") ||
       msg.includes("fetch failed") ||
+      msg.includes("unknown session") ||  // Session expired/invalidated on server
       name === "econnrefused" ||
       name === "econnreset" ||
       name === "enotfound" ||
