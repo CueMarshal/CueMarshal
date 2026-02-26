@@ -322,8 +322,8 @@ CueMarshal's internal agents that execute SDLC tasks:
 # Build all images
 bash scripts/build-images.sh
 
-# Deploy to k3d (local Kubernetes)
-bash scripts/deploy-to-k3d.sh
+# Deploy to local Kubernetes cluster
+bash scripts/deploy-to-cluster.sh
 
 # Register runners
 bash scripts/register-runners.sh

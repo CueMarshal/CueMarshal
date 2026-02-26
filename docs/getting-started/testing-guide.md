@@ -39,54 +39,70 @@ cd ~/source/repos/cuemarshal
 - [ ] If Google OAuth: Gitea shows Google sign-in option
 - [ ] Grafana loads at http://localhost:8180/grafana (if enabled)
 
-## Test 2: Helm Chart on k3d
+## Test 2: Helm Chart on Local Kubernetes
 
 ### Prerequisites
-- k3d installed
+- A local Kubernetes cluster (one of: docker-desktop, k3d, kind, minikube)
 - kubectl installed
 - Helm 3.12+ installed
 
-### Setup k3d
+### Setup Local Cluster
 
+Choose one of the supported providers:
+
+**Docker Desktop** (macOS/Windows):
 ```bash
-# Create k3d cluster with ingress ports mapped
+# Enable Kubernetes in Docker Desktop settings
+# Settings → Kubernetes → Enable Kubernetes → Apply & Restart
+```
+
+**k3d** (lightweight, recommended for CI):
+```bash
 k3d cluster create dev \
   --port "80:80@loadbalancer" \
   --port "443:443@loadbalancer"
+```
 
-# Verify k3d is running
-k3d cluster list
+**kind**:
+```bash
+kind create cluster --name dev
+```
 
-# Add demo.local to /etc/hosts for local access
+**minikube**:
+```bash
+minikube start -p dev
+```
+
+Then add `demo.local` to `/etc/hosts` for local access:
+```bash
 echo "127.0.0.1 demo.local" | sudo tee -a /etc/hosts
 ```
 
-**Important**: k3d comes with **traefik** as the default ingress controller (not nginx-ingress). Traefik is fully integrated with k3d's networking and service discovery.
+**Note**: k3d includes **traefik** as the default ingress controller. Other providers may require installing an ingress controller separately.
 
 ### Deploy CueMarshal
 
-The recommended approach is to use the `deploy-to-k3d.sh` script, which builds images, loads them into k3d, and deploys the Helm chart in one step:
+The recommended approach is to use the `deploy-to-cluster.sh` script, which auto-detects the local cluster provider (docker-desktop, k3d, kind, minikube), builds images, loads them, and deploys the Helm chart in one step:
 
 ```bash
 cd ~/source/repos/verbose-octo
 
-# Update kubeconfig to access the cluster
-k3d kubeconfig get dev > ~/.kube/k3d-dev-config
-export KUBECONFIG=~/.kube/k3d-dev-config
+# Ensure kubectl is pointing to your local cluster (the deploy script auto-detects provider)
+kubectl config current-context
 
 # Install Helm dependencies
 cd infrastructure/helm/cuemarshal
 helm dependency update
 cd ../../../
 
-# Deploy using the helper script (builds images + loads into k3d + helm upgrade)
-bash scripts/deploy-to-k3d.sh dev
+# Deploy using the helper script (auto-detects provider, builds images, loads them, runs helm upgrade)
+bash scripts/deploy-to-cluster.sh dev
 
 # Watch pods starting
 kubectl get pods -n cuemarshal-ws-dev --watch
 ```
 
-Alternatively, deploy manually (requires images already loaded into k3d):
+Alternatively, deploy manually (requires images already loaded into the cluster):
 
 ```bash
 helm upgrade --install dev-workspace ./infrastructure/helm/cuemarshal \
@@ -152,14 +168,17 @@ kubectl get statefulset -n cuemarshal-ws-dev dev-workspace-cuemarshal-postgres
 ### Cleanup
 
 ```bash
-# Uninstall
+# Uninstall Helm release
 helm uninstall dev-workspace --namespace cuemarshal-ws-dev
 
 # Delete namespace
 kubectl delete namespace cuemarshal-ws-dev
 
-# Stop k3d
-k3d cluster delete dev
+# Delete the cluster (choose based on provider)
+k3d cluster delete dev           # k3d
+kind delete cluster --name dev   # kind
+minikube delete -p dev           # minikube
+# docker-desktop: disable Kubernetes in settings
 ```
 
 ## Test 3: Management API (Local Development)
@@ -220,17 +239,18 @@ npm run web
 - [ ] Login screen shows "Continue with Google"
 - [ ] Navigation to workspace screen works
 
-## Test 5: Accessing Services in k3d Deployment
+## Test 5: Accessing Services in Local Cluster Deployment
 
 ### Prerequisites
-- CueMarshal deployed to k3d (see Test 2)
+- CueMarshal deployed to a local Kubernetes cluster (see Test 2)
 
 ### Accessing Individual Services
 
 From your local machine with port-forwarding:
 
 ```bash
-export KUBECONFIG=~/.kube/k3d-dev-config
+# Ensure kubectl context points to your local cluster
+kubectl config current-context
 
 # Access Gitea
 kubectl port-forward -n cuemarshal-ws-dev svc/dev-workspace-cuemarshal-gitea 3000:3000 &
@@ -270,10 +290,10 @@ curl http://config.demo.local       # Conductor configuration
 - [ ] Can view logs: `kubectl logs -f -n cuemarshal-ws-dev deployment/dev-workspace-cuemarshal-landing`
 - [ ] Database is initialized: `kubectl exec -n cuemarshal-ws-dev statefulset/dev-workspace-cuemarshal-postgres -- psql -U postgres -l`
 
-## Test 6: OAuth2 Login Flow (k3d Deployment)
+## Test 6: OAuth2 Login Flow (Local Cluster Deployment)
 
 ### Prerequisites
-- CueMarshal deployed to k3d (see Test 2)
+- CueMarshal deployed to a local Kubernetes cluster (see Test 2)
 - Landing page accessible at http://demo.local
 
 ### Authentication Architecture
@@ -346,9 +366,10 @@ Manual browser test:
 4. Management API locally (basic routes)
 5. Onboarding web wizard (3 screens) locally
 6. Helm chart structure and validation (`helm lint`)
-7. **Full Helm deployment to k3d with traefik**
+7. **Full Helm deployment to local Kubernetes clusters**
+   - Supported providers: docker-desktop, k3d, kind, minikube
    - All core services (postgres, redis, gitea, conductor, gateway, landing, mcp-servers, runner)
-   - Traefik ingress routing to landing service
+   - Ingress routing to landing service (traefik recommended for k3d)
    - Service discovery and inter-pod communication
    - Init-gitea Helm hook (post-install/post-upgrade)
    - Local development with hot-reload
@@ -359,7 +380,7 @@ Manual browser test:
    - Authenticated dashboard with agent activity
 
 ### 🚧 What Needs More Work to Test
-1. **Nginx-ingress controller** - Has Lua-based backend discovery issues; use **traefik instead** (k3d built-in)
+1. **Nginx-ingress controller** - Has Lua-based backend discovery issues on some local setups; traefik is recommended for k3d
 2. **End-to-end onboarding flow** - Requires 6 more screens
 3. **Workspace provisioning** - Gitea repository creation within deployed workspace
 4. **Wave payment** - Requires Wave API credentials
@@ -379,7 +400,7 @@ Manual browser test:
 
 3. **End-to-end onboarding flow** (when available):
    - Create workspace via web wizard
-   - Deploy workspace to k3d automatically
+   - Deploy workspace to local cluster automatically
    - Verify all services are accessible
 
 4. **Production deployment** (for staging/CI):
@@ -396,21 +417,27 @@ Manual browser test:
 
 ## Troubleshooting
 
-### Ingress Controller Choice (Important for k3d)
+### Ingress Controller Choice (Important for Local Clusters)
 
 **Lesson Learned:** The Helm chart can be configured with different ingress controllers via `ingress.className`:
 
 - **traefik** (RECOMMENDED for k3d): k3d's built-in ingress controller. Better integrated with k3d's networking, automatic LoadBalancer support, and reliable service discovery.
-- **nginx** (NOT recommended for k3d): The nginx-ingress controller uses Lua-based dynamic backend discovery which can have issues resolving services. Works better on cloud platforms with proper load balancer support.
+- **nginx**: Works well on cloud platforms and docker-desktop. The nginx-ingress controller uses Lua-based dynamic backend discovery which can have issues on some local setups.
+
+For local clusters, the recommended approach:
+- **k3d**: Use traefik (built-in)
+- **docker-desktop**: Use nginx-ingress or install traefik
+- **kind**: Install nginx-ingress or traefik via Helm
+- **minikube**: Enable ingress addon (`minikube addons enable ingress`)
 
 **Configuration** in `local-values.yaml`:
 ```yaml
 ingress:
   enabled: true
-  className: "traefik"  # Use traefik for k3d
+  className: "traefik"  # or "nginx" depending on provider
   
 ingress-nginx:
-  enabled: false  # Disable nginx-ingress for k3d
+  enabled: false  # Disable if using traefik
 ```
 
 ### Docker Compose Issues
@@ -418,15 +445,15 @@ ingress-nginx:
 - **Port conflicts**: Stop conflicting services or change ports in docker-compose.yml
 - **API key errors**: Verify keys with `scripts/validate-env.sh --prod`
 
-### k3d Issues
+### Local Cluster Issues
 - **Pods pending**: Check storage with `kubectl get pvc -n cuemarshal-ws-dev`
-- **ImagePullBackOff**: Images need to be in registry or loaded into k3d with `k3d image import`. Always use `deploy-to-k3d.sh` which handles image building and loading automatically. Running `helm upgrade` alone without loading images first will cause this error.
+- **ImagePullBackOff**: Images need to be in the registry or loaded into the cluster. Always use `deploy-to-cluster.sh` which handles image building and loading automatically for all supported providers (docker-desktop, k3d, kind, minikube). Running `helm upgrade` alone without loading images first will cause this error.
 - **Ingress not working**:
-  - Verify traefik is running: `kubectl get pods -n kube-system | grep traefik`
+  - Verify your ingress controller is running: `kubectl get pods -n kube-system | grep -E 'traefik|nginx'`
   - Check ingress status: `kubectl describe ingress -n cuemarshal-ws-dev`
   - Verify /etc/hosts has `127.0.0.1 demo.local`
-- **404 responses from ingress**: Likely backend service discovery issue - use traefik instead of nginx-ingress
-- **LoadBalancer service pending**: k3d should auto-assign EXTERNAL-IP with traefik; if not, restart services
+- **404 responses from ingress**: Likely backend service discovery issue - verify ingress controller is compatible with your cluster provider
+- **LoadBalancer service pending**: docker-desktop and k3d handle this automatically; for kind/minikube you may need MetalLB or NodePort services
 
 ### OAuth2 / Authentication Issues
 
