@@ -97,7 +97,7 @@ router.get("/sessions", validateMobileToken, async (req: Request, res: Response)
  * GET /api/chat/sessions/:id
  * Get full chat history for a session
  */
-router.get("/sessions/:id", async (req: Request, res: Response): Promise<void> => {
+router.get("/sessions/:id", validateMobileToken, async (req: Request, res: Response): Promise<void> => {
   try {
     const sessionId = req.params.id as string;
     const userId = (req as any).user?.id || "anonymous";
