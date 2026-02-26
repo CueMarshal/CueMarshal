@@ -1,20 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Sparkles, PlusCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { sendChatMessage } from '../../services/api';
+import { sendChatMessage, fetchChatHistory } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
 
-export default function ChatView() {
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      role: 'assistant',
-      content: "Hello! I'm Marshal the Lion. How can my team help you orchestrate your pipeline today?",
-      agent: 'Marshal',
-    }
-  ]);
+const WELCOME_MESSAGE = {
+  id: 1,
+  role: 'assistant',
+  content: "Hello! I'm Marshal the Lion. How can my team help you orchestrate your pipeline today?",
+  agent: 'Marshal',
+};
+
+export default function ChatView({ currentSessionId = null, onSessionChange, onNewChat }) {
+  const [messages, setMessages] = useState([WELCOME_MESSAGE]);
   const [input, setInput] = useState('');
-  const [sessionId, setSessionId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const { token } = useAuthStore();
@@ -26,6 +25,36 @@ export default function ChatView() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Load session history when currentSessionId changes
+  useEffect(() => {
+    if (!currentSessionId) {
+      setMessages([{ ...WELCOME_MESSAGE, id: Date.now() }]);
+      return;
+    }
+
+    const loadHistory = async () => {
+      try {
+        setIsLoading(true);
+        const data = await fetchChatHistory(currentSessionId);
+        if (data.messages && data.messages.length > 0) {
+          setMessages(data.messages.map((msg, i) => ({
+            id: i + 1,
+            role: msg.role,
+            content: msg.content,
+            agent: msg.role === 'assistant' ? 'Marshal' : undefined,
+          })));
+        } else {
+          setMessages([{ ...WELCOME_MESSAGE, id: Date.now() }]);
+        }
+      } catch (err) {
+        console.error('Failed to load session history:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadHistory();
+  }, [currentSessionId]);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -39,11 +68,11 @@ export default function ChatView() {
     setIsLoading(true);
 
     try {
-      const data = await sendChatMessage(text, sessionId);
+      const data = await sendChatMessage(text, currentSessionId);
 
-      // Store session ID for conversation continuity
-      if (data.sessionId) {
-        setSessionId(data.sessionId);
+      // Notify parent of session ID for persistence
+      if (data.sessionId && onSessionChange) {
+        onSessionChange(data.sessionId);
       }
 
       setMessages(prev => [...prev, {
@@ -75,13 +104,9 @@ export default function ChatView() {
   };
 
   const handleNewChat = () => {
-    setSessionId(null);
-    setMessages([{
-      id: Date.now(),
-      role: 'assistant',
-      content: "Hello! I'm Marshal the Lion. How can my team help you orchestrate your pipeline today?",
-      agent: 'Marshal',
-    }]);
+    if (onNewChat) {
+      onNewChat();
+    }
   };
 
   const suggestions = [

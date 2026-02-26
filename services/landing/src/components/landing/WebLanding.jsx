@@ -1,13 +1,22 @@
-import React, { useState } from 'react';
-import { Bot, Terminal, LogOut, User as UserIcon, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Bot, Terminal, LogOut, User as UserIcon, Sparkles, Menu } from 'lucide-react';
 import ChatView from './ChatView';
 import ActivityView from './ActivityView';
+import SessionSidebar from './SessionSidebar';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '../../stores/auth';
+import { fetchChatSessions, deleteChatSession, updateChatSession } from '../../services/api';
+import { storage } from '../../services/storage';
 
 export default function WebLanding() {
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'activity' on mobile
   const { token, user, logout, startOAuthFlow } = useAuthStore();
+
+  // Session management state
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
 
   const handleLogin = async () => {
     const result = await startOAuthFlow();
@@ -18,6 +27,76 @@ export default function WebLanding() {
 
   const handleLogout = async () => {
     await logout();
+  };
+
+  // Load sessions and restore active session on auth
+  useEffect(() => {
+    if (token && user) {
+      loadSessions();
+      restoreSession();
+    }
+  }, [token, user]);
+
+  const loadSessions = async () => {
+    try {
+      setSessionsLoading(true);
+      const data = await fetchChatSessions();
+      setSessions(data.sessions || []);
+    } catch (err) {
+      console.error('Failed to load sessions:', err);
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  const restoreSession = async () => {
+    const savedId = await storage.getCurrentSessionId();
+    if (savedId) {
+      setCurrentSessionId(savedId);
+    }
+  };
+
+  const handleSessionChange = async (sessionId) => {
+    setCurrentSessionId(sessionId);
+    await storage.saveCurrentSessionId(sessionId);
+    // Refresh sessions list to update previews
+    loadSessions();
+  };
+
+  const handleSelectSession = (sessionId) => {
+    setCurrentSessionId(sessionId);
+    storage.saveCurrentSessionId(sessionId);
+    setSidebarOpen(false);
+  };
+
+  const handleNewChat = () => {
+    setCurrentSessionId(null);
+    storage.clearCurrentSessionId();
+    setSidebarOpen(false);
+  };
+
+  const handleDeleteSession = async (sessionId) => {
+    try {
+      await deleteChatSession(sessionId);
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      if (currentSessionId === sessionId) {
+        setCurrentSessionId(null);
+        await storage.clearCurrentSessionId();
+      }
+    } catch (err) {
+      console.error('Failed to delete session:', err);
+    }
+  };
+
+  const handleToggleFavorite = async (sessionId, isFavorite) => {
+    try {
+      await updateChatSession(sessionId, { is_favorite: !isFavorite });
+      setSessions(prev => prev.map(s =>
+        s.id === sessionId ? { ...s, is_favorite: !isFavorite } : s
+      ));
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+    }
   };
 
   // Show login screen if not authenticated
@@ -80,6 +159,13 @@ export default function WebLanding() {
       {/* Navbar Minimal */}
       <header className="flex items-center justify-between p-4 border-b border-gray-100 bg-cuemarshal-navy text-white">
         <div className="flex items-center gap-3">
+          {/* Mobile sidebar toggle */}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="md:hidden p-2 text-gray-300 hover:text-white rounded transition-colors"
+          >
+            <Menu size={20} />
+          </button>
           <img src="/logo.svg" alt="CueMarshal" className="h-8 w-auto" />
         </div>
         <div className="flex items-center gap-4">
@@ -119,6 +205,35 @@ export default function WebLanding() {
       {/* Main Content Area */}
       <div className="flex flex-1 flex-col md:flex-row overflow-hidden relative">
 
+        {/* Desktop Session Sidebar */}
+        <div className="hidden md:flex w-[280px] shrink-0">
+          <SessionSidebar
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            onSelectSession={handleSelectSession}
+            onNewChat={handleNewChat}
+            onDeleteSession={handleDeleteSession}
+            onToggleFavorite={handleToggleFavorite}
+            isOpen={true}
+            onClose={() => {}}
+            isLoading={sessionsLoading}
+          />
+        </div>
+
+        {/* Mobile Sidebar Overlay */}
+        <SessionSidebar
+          sessions={sessions}
+          currentSessionId={currentSessionId}
+          onSelectSession={handleSelectSession}
+          onNewChat={handleNewChat}
+          onDeleteSession={handleDeleteSession}
+          onToggleFavorite={handleToggleFavorite}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          isLoading={sessionsLoading}
+          isMobileOverlay
+        />
+
         {/* Mobile Toggle */}
         <div className="md:hidden flex p-2 bg-gray-50 border-b border-gray-200 gap-2 shrink-0">
           <button
@@ -137,7 +252,11 @@ export default function WebLanding() {
 
         {/* Left Panel: Chat (Default) */}
         <div className={`flex-1 flex flex-col bg-white border-r border-gray-100 md:flex h-full ${activeTab === 'activity' ? 'hidden md:flex' : 'flex'}`}>
-          <ChatView />
+          <ChatView
+            currentSessionId={currentSessionId}
+            onSessionChange={handleSessionChange}
+            onNewChat={handleNewChat}
+          />
         </div>
 
         {/* Right Panel: Activity (Agents) */}

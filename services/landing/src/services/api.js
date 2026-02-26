@@ -54,3 +54,31 @@ export async function fetchChatHistory(sessionId) {
   const res = await api.get(`/chat/sessions/${sessionId}`);
   return res.data;
 }
+
+/**
+ * Create a new chat session.
+ * @param {string|null} title - optional session title
+ * @returns {Promise<{id: string, title: string|null, is_favorite: boolean, created_at: string, updated_at: string}>}
+ */
+export async function createChatSession(title = null) {
+  const res = await api.post('/chat/sessions', { title });
+  return res.data;
+}
+
+/**
+ * Update a chat session (title, favorite status).
+ * @param {string} sessionId
+ * @param {Object} updates - { title?: string, is_favorite?: boolean }
+ */
+export async function updateChatSession(sessionId, updates) {
+  const res = await api.patch(`/chat/sessions/${sessionId}`, updates);
+  return res.data;
+}
+
+/**
+ * Delete a chat session.
+ * @param {string} sessionId
+ */
+export async function deleteChatSession(sessionId) {
+  await api.delete(`/chat/sessions/${sessionId}`);
+}

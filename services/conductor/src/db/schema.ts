@@ -2,7 +2,7 @@
  * Drizzle ORM schema for Conductor database
  */
 
-import { pgTable, uuid, text, integer, timestamp, decimal, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, timestamp, decimal, jsonb, pgEnum, boolean } from "drizzle-orm/pg-core";
 
 // Enums
 export const taskStatusEnum = pgEnum("task_status", [
@@ -53,6 +53,8 @@ export const projects = pgTable("projects", {
 export const chatSessions = pgTable("chat_sessions", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: text("user_id").notNull(),
+  title: text("title"),
+  isFavorite: boolean("is_favorite").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
