@@ -4,16 +4,16 @@ set -euo pipefail
 # Deploy CueMarshal to a local Kubernetes cluster
 # Automatically detects: docker-desktop, k3d, kind, minikube
 #
-# Usage: bash scripts/deploy-to-cluster.sh [cluster-name] [build-registry]
+# Usage: bash scripts/deploy-to-cluster.sh [cluster-name] [build-registry] [tag] [namespace]
 #
 # build-registry should include org (e.g., ghcr.io/cuemarshal or docker.io/cuemarshal)
 # but the helm-registry passed to Helm will be just the base (ghcr.io or docker.io)
 
-CLUSTER_NAME="${1:-dev}"
-BUILD_REGISTRY="${2:-ghcr.io/cuemarshal}"
+CLUSTER_NAME="${CLUSTER_NAME:-dev}"
+BUILD_REGISTRY="${REGISTRY:-ghcr.io/cuemarshal}"
 HELM_REGISTRY="$(echo "$BUILD_REGISTRY" | cut -d'/' -f1-2)"
-TAG="latest"
-NAMESPACE="cuemarshal-ws-${CLUSTER_NAME}"
+TAG="${TAG:-latest}"
+NAMESPACE="${NAMESPACE:-cuemarshal-local}"
 
 # --- Cluster detection -----------------------------------------------------------
 

@@ -4,7 +4,12 @@
 # Workspace identity
 workspace:
   slug: ""  # REQUIRED: Unique workspace identifier (becomes namespace suffix and subdomain)
-  domain: "cuemarshal.dev"  # Base domain for ingress
+  domain: "cuemarshal.local"  # Base domain for ingress
+  fqdn: ""  # Override the full FQDN if needed
+
+# Global storage settings
+storage:
+  storageClass: ""  # Use cluster default if empty
 
 # Container images
 image:
