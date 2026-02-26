@@ -35,13 +35,15 @@ spec:
             secretKeyRef:
               name: {{ include "cuemarshal.fullname" . }}-secrets
               key: litellm-master-key
-        - name: REDIS_URL
-          value: "redis://:$(REDIS_PASSWORD)@{{ include "cuemarshal.fullname" . }}-redis:6379"
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
               name: {{ include "cuemarshal.fullname" . }}-secrets
               key: redis-password
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@{{ include "cuemarshal.fullname" . }}-redis:6379"
+        - name: GITEA_URL
+          value: "http://{{ include "cuemarshal.fullname" . }}-gitea:3000"
         - name: CONDUCTOR_URL
           value: "http://{{ include "cuemarshal.fullname" . }}-conductor"
         - name: CONDUCTOR_SECRET
@@ -49,13 +51,13 @@ spec:
             secretKeyRef:
               name: {{ include "cuemarshal.fullname" . }}-secrets
               key: conductor-secret
-        - name: DATABASE_URL
-          value: "postgresql://{{ .Values.postgres.user | default "cuemarshal" }}:$(POSTGRES_PASSWORD)@{{ include "cuemarshal.fullname" . }}-postgres:5432/{{ .Values.postgres.database | default "cuemarshal" }}"
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
               name: {{ include "cuemarshal.fullname" . }}-secrets
               key: postgres-password
+        - name: DATABASE_URL
+          value: "postgresql://{{ .Values.postgres.user | default "cuemarshal" }}:$(POSTGRES_PASSWORD)@{{ include "cuemarshal.fullname" . }}-postgres:5432/{{ .Values.postgres.database | default "cuemarshal" }}"
         ports:
         - name: http
           containerPort: 80
