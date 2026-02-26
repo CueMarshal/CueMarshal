@@ -1,282 +1,344 @@
-# CueMarshal Agents
+# AGENTS.md
 
-Quick reference guide to the specialized AI agents that power the CueMarshal platform.
+Instructions for AI coding agents contributing to the CueMarshal project.
 
-## Overview
+## Project Overview
 
-CueMarshal uses 7 specialized agents, each powered by OpenCode with tailored system prompts, tool permissions, and model tiers. All agents run in Gitea Act Runners and access Gitea, Conductor, and System MCP servers via stdio transport.
+CueMarshal is a self-hosted, Git-centric AI software development platform. The system uses Gitea as the single source of truth, a TypeScript Conductor for orchestration, 7 specialized SDLC agents powered by OpenCode, and MCP (Model Context Protocol) servers for unified tool access.
 
-## Agent Roster
+**Key Architecture**:
+- **Conductor**: TypeScript orchestrator (Express, BullMQ, Drizzle ORM)
+- **Gateway**: LiteLLM proxy with tiered model routing
+- **MCP Servers**: 5 TypeScript servers (gitea-mcp, conductor-mcp, system-mcp, vector-mcp, sonar-mcp)
+- **Runner**: Custom Gitea Act Runner with OpenCode + MCP
+- **Agents**: 7 SDLC role-specific agents (architect, developer, reviewer, tester, devops, docs, linter)
+- **Mobile**: React Native Expo app with OAuth2
 
-### Ava — Architect Agent
+## Setup Commands
 
-**Role**: System design, architecture decisions, and technical specifications
+```bash
+# Clone and setup
+git clone https://github.com/CueMarshal/CueMarshal.git
+cd cuemarshal
 
-**Gitea Identity**: `agent-architect` (architect@cuemarshal.local)  
-**Model Tier**: tier3 (Complex)  
-**Tools**: Full access (read, write, edit, bash, all MCP tools)
+# Environment configuration
+cp .env.example .env
+# Edit .env with your API keys and secrets
 
-**Responsibilities**:
-- Design system architecture and component interactions
-- Create API contracts and interface specifications
-- Make technology stack decisions
-- Define data models and database schemas
-- Produce architecture decision records (ADRs)
+# Start all services
+docker compose up -d
 
-**When to Use**: New features requiring design, system refactors, performance optimization planning
-
----
-
-### Dave — Developer Agent
-
-**Role**: Feature implementation, bug fixes, and code changes
-
-**Gitea Identity**: `agent-developer` (developer@cuemarshal.local)  
-**Model Tier**: tier2 (Standard)  
-**Tools**: Full access (read, write, edit, bash, all MCP tools)
-
-**Responsibilities**:
-- Implement features from specifications
-- Fix bugs and resolve issues
-- Refactor code for maintainability
-- Add inline documentation
-- Create commits following conventional commits
-
-**When to Use**: Feature implementation, bug fixes, code refactoring, general development tasks
-
-**Special**: Also used for self-improvement workflows
-
----
-
-### Reese — Reviewer Agent
-
-**Role**: Code review, quality checks, and security review
-
-**Gitea Identity**: `agent-reviewer` (reviewer@cuemarshal.local)  
-**Model Tier**: tier2 (Standard)  
-**Tools**: Read-only + review tools (no write/edit, bash allowed for local checks)
-
-**Responsibilities**:
-- Review pull requests for code quality
-- Check for security vulnerabilities
-- Verify tests exist and pass
-- Ensure coding standards compliance
-- Submit PR reviews with approval or request changes
-
-**When to Use**: All pull requests (automatic via `code-review.yml` workflow)
-
----
-
-### Tess — Tester Agent
-
-**Role**: Test writing, test execution, and coverage analysis
-
-**Gitea Identity**: `agent-tester` (tester@cuemarshal.local)  
-**Model Tier**: tier2 (Standard)  
-**Tools**: Full access (read, write, edit, bash, all MCP tools)
-
-**Responsibilities**:
-- Write unit tests for new features
-- Write integration tests for APIs
-- Run test suites and analyze failures
-- Check test coverage and identify gaps
-- Create test fixtures and mocks
-
-**When to Use**: Test creation tasks, test coverage improvements, test debugging
-
----
-
-### Devin — DevOps Agent
-
-**Role**: CI/CD, infrastructure, and deployment
-
-**Gitea Identity**: `agent-devops` (devops@cuemarshal.local)  
-**Model Tier**: tier2 (Standard)  
-**Tools**: Full access (read, write, edit, bash, all MCP tools)
-
-**Responsibilities**:
-- Create and maintain Dockerfiles
-- Configure CI/CD pipelines (Gitea Actions)
-- Set up infrastructure (docker-compose, nginx)
-- Configure monitoring and logging
-- Manage secrets and environment configuration
-
-**When to Use**: Infrastructure changes, Docker/Kubernetes config, CI/CD setup, deployment issues
-
----
-
-### Dot — Documentation Agent
-
-**Gitea Identity**: `agent-docs` (docs@cuemarshal.local)  
-**Model Tier**: tier1 (Simple)  
-**Tools**: Read, write, edit, grep, glob (NO bash)
-
-**Responsibilities**:
-- Write and update README files
-- Create API documentation
-- Write user guides and tutorials
-- Document architecture decisions
-- Add inline code comments
-
-**When to Use**: Documentation tasks, README updates, API docs, user guides
-
-**Note**: Optimized for documentation tasks with cost-efficient tier1 model. Bash disabled for safety.
-
----
-
-### Linton — Linter Agent
-
-**Role**: Pre-PR quality checks and automated code fixes
-
-**Gitea Identity**: `agent-linter` (linter@cuemarshal.local)  
-**Model Tier**: tier1 (Simple)  
-**Tools**: Read, edit, bash, grep, glob (NO write)
-
-**Responsibilities**:
-- Detect and fix syntax errors automatically
-- Check for missing imports
-- Run linters (ESLint, Prettier) and apply fixes
-- Detect type errors in TypeScript
-- Fix mechanical code violations
-- Ensure code formatting compliance
-
-**When to Use**: Runs automatically in `task-execute.yml` BEFORE PR creation
-
-**Benefits**:
-- Catches ~30% of issues before they reach the Reviewer
-- Saves tier2 model costs by preventing PR rejections
-- No additional workflow trigger required
-
-**Note**: Optimized for mechanical checks with tier1 model. Does not create PRs—only fixes code inline.
-
----
-
-## Agent Selection Matrix
-
-| Task Type | Primary Agent | Supporting Agents | Model Tier |
-|-----------|--------------|-------------------|------------|
-| New feature design | Architect (Ava) | — | tier3 |
-| Feature implementation | Developer (Dave) | Architect (if design needed) | tier2 |
-| Bug fix | Developer (Dave) | Tester (verify fix) | tier2 |
-| Pre-PR quality gate | Linter (Linton) | — | tier1 |
-| Code review | Reviewer (Reese) | — | tier2 |
-| Write tests | Tester (Tess) | — | tier2 |
-| CI/CD setup | DevOps (Devin) | — | tier2 |
-| Dockerfile changes | DevOps (Devin) | — | tier2 |
-| README update | Docs (Dot) | — | tier1 |
-| API documentation | Docs (Dot) | Developer (clarification) | tier1 |
-| Security review | Reviewer (Reese) | Architect (if design issue) | tier2 |
-| Performance fix | Developer (Dave) | Architect (if systemic) | tier2 |
-
-## Execution Flow
-
-### Standard Task Flow
-
-```
-1. Issue Created
-   ↓
-2. Conductor assigns role label (via decomposition)
-   ↓
-3. Conductor triggers task-execute.yml workflow
-   ↓
-4. Runner checks out code on feature branch
-   ↓
-5. Runner loads role-specific OpenCode config
-   ↓
-6. Runner loads role credentials (SCM_TOKEN_{ROLE})
-   ↓
-7. Linter agent runs (quality gate)
-   ↓
-8. Assigned agent executes task with OpenCode
-   ↓
-9. Agent commits changes as role user
-   ↓
-10. Agent creates PR (if workflow allows)
+# Verify services
+docker compose ps
 ```
 
-### PR Review Flow
+## Development Environment
 
-```
-1. PR Created
-   ↓
-2. Gitea webhook fires (pull_request event)
-   ↓
-3. Conductor triggers code-review.yml workflow
-   ↓
-4. Reviewer agent loads as agent-reviewer
-   ↓
-5. Reviewer analyzes changes and tests
-   ↓
-6. Reviewer submits review (approve/request changes)
-   ↓
-7. Conductor merges if approved (or notifies developer)
-```
+### TypeScript Services (Conductor, MCP Servers)
 
-## Technical Details
+```bash
+# Install dependencies
+cd services/conductor  # or services/mcp-servers
+npm install
 
-### Agent Profiles Location
+# Development mode with hot reload
+npm run dev
 
-```
-services/agents/{role}/
-├── opencode.json                    # OpenCode configuration
-└── .opencode/
-    └── agents/
-        └── {role}.md                # System prompt
+# Build
+npm run build
+
+# Type checking
+npm run typecheck
+
+# Database migrations
+npm run db:generate  # Generate migration
+npm run db:migrate   # Apply migration
 ```
 
-### Shared Configuration
+### Running Individual Services
 
-All agents inherit base configuration from `services/agents/shared/opencode.base.json`:
-- LLM Gateway connection (http://gateway:4100/v1)
-- MCP server connections (stdio transport)
-- Base tool permissions
+```bash
+# Conductor
+cd services/conductor && npm run dev
 
-### Model Tier Mapping
+# MCP Server (stdio mode)
+cd services/mcp-servers/gitea-mcp && npm run build && node dist/index.js
 
-| Tier | Use Case | Default Models | Cost Multiplier |
-|------|----------|----------------|-----------------|
-| tier1 | Simple tasks (docs, linting) | Gemini Flash, GPT-4o-mini | 1x |
-| tier2 | Standard tasks (dev, review, test) | GPT-4o, Claude Sonnet | 10x |
-| tier3 | Complex tasks (architecture) | Claude Opus, GPT-4 Turbo | 50x |
+# MCP Server (HTTP mode for testing)
+cd services/mcp-servers/gitea-mcp && MCP_TRANSPORT=http PORT=4200 npm run dev
+```
 
-See [docs/architecture/model-selection.md](docs/architecture/model-selection.md) for selection algorithm.
+## Testing Instructions
 
-### MCP Tool Access
+### Run All Tests
 
-Each agent connects to three MCP servers via stdio:
+```bash
+# MCP Servers
+cd services/mcp-servers
+npm test
 
-- **Gitea MCP** (port 4200): Issue, PR, branch, file, workflow operations
-- **Conductor MCP** (port 4201): Task coordination, progress reporting, agent status
-- **System MCP** (port 4202): LLM costs, runner status, health checks
+# Conductor
+cd services/conductor
+npm test
 
-Some agents also connect to:
+# With coverage
+npm run test:coverage
+```
 
-- **Vector MCP** (port 4203): Semantic search and embeddings
-- **Sonar MCP** (port 4204): SonarQube code quality metrics
+### Test Workflow
 
-## Identity and Credentials
+1. **Before committing**: Run tests for the service you modified
+2. **Fix all failures**: Tests must be green before PR
+3. **Add tests**: For new features or bug fixes, add corresponding tests
+4. **Type checking**: Run `npm run typecheck` to catch TypeScript errors
 
-Each agent has a dedicated Gitea user account created during platform initialization:
+### Integration Testing
 
-| Agent | Username | Email | Display Name |
-|-------|----------|-------|--------------|
-| Architect | agent-architect | architect@cuemarshal.local | Ava — Architect |
-| Developer | agent-developer | developer@cuemarshal.local | Dave — Developer |
-| Reviewer | agent-reviewer | reviewer@cuemarshal.local | Reese — Reviewer |
-| Tester | agent-tester | tester@cuemarshal.local | Tess — Tester |
-| DevOps | agent-devops | devops@cuemarshal.local | Devin — DevOps |
-| Docs | agent-docs | docs@cuemarshal.local | Dot — Technical Writer |
-| Linter | agent-linter | linter@cuemarshal.local | Linton — Code Quality |
+```bash
+# Test gateway fallback
+bash scripts/test-gateway-fallback.sh
 
-**Token Storage**: API tokens stored in `/tokens/{role}_token` volume  
-**Workflow Access**: Available as `SCM_TOKEN_{ROLE}` secrets in Gitea Actions
+# Test conductor → gateway integration
+bash scripts/test-gateway-from-conductor.sh
 
-See [docs/architecture/role-identity-mapping.md](docs/architecture/role-identity-mapping.md) for complete identity documentation.
+# Validate environment
+bash scripts/validate-env.sh
+```
 
-## Further Reading
+## Code Style Guidelines
 
-- **Detailed Agent Documentation**: [docs/features/agents/overview.md](docs/features/agents/overview.md)
-- **Workflow Execution**: [docs/features/workflows/overview.md](docs/features/workflows/overview.md)
-- **MCP Server Tools**: [docs/features/mcp-servers/overview.md](docs/features/mcp-servers/overview.md)
-- **Model Selection Algorithm**: [docs/architecture/model-selection.md](docs/architecture/model-selection.md)
-- **Security and Permissions**: [docs/operations/security.md](docs/operations/security.md)
+### TypeScript Conventions
+
+- **ES Modules**: Use `"type": "module"` in package.json
+- **Import extensions**: Always use `.js` extension in imports (required for ESM)
+  ```typescript
+  import { myFunction } from './utils/helper.js';  // ✓ Correct
+  import { myFunction } from './utils/helper';     // ✗ Wrong
+  ```
+- **Strict types**: Enable TypeScript strict mode
+- **Zod validation**: Use Zod schemas for all environment variables and API inputs
+- **Structured logging**: Use Pino, not console.log
+- **Async/await**: Prefer over callbacks
+
+### File Naming
+
+- **kebab-case**: For files and directories (`model-selector.ts`, not `ModelSelector.ts`)
+- **PascalCase**: For classes and types
+- **camelCase**: For variables and functions
+
+### Database Patterns
+
+```typescript
+// Use Drizzle ORM with PostgreSQL
+import { pgTable, uuid, text, timestamp } from 'drizzle-orm/pg-core';
+
+export const myTable = pgTable('my_table', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+```
+
+### Error Handling
+
+```typescript
+// Validate inputs with Zod
+const schema = z.object({ ... });
+const validated = schema.safeParse(input);
+if (!validated.success) {
+  return res.status(400).json({ error: validated.error });
+}
+
+// Try-catch for async operations
+try {
+  const result = await service.doSomething();
+  res.json(result);
+} catch (error) {
+  logger.error({ error }, 'Operation failed');
+  res.status(500).json({ error: 'Internal server error' });
+}
+```
+
+## Architecture & Conventions
+
+### Configuration Source of Truth
+
+1. **Environment Variables**: `services/conductor/src/config.ts` (ConfigSchema)
+2. **LLM Models**: `services/gateway/litellm_config.yaml` (ONLY runtime source)
+3. **Workflows**: `.gitea/workflows/*.yml` (actual trigger mechanism)
+4. **MCP Tools**: `services/mcp-servers/{server}/src/tools/` (tool definitions)
+5. **Agent Profiles**: `services/agents/{role}/opencode.json` (agent config)
+
+See `docs/getting-started/configuration.md` for full hierarchy.
+
+### MCP Server Development
+
+```typescript
+// Tool definition pattern
+export const MyTool = {
+  my_action: {
+    description: "Clear description of what this tool does",
+    parameters: z.object({
+      param1: z.string().describe("Parameter description"),
+      param2: z.number().optional().describe("Optional parameter"),
+    }),
+    handler: async (args: { param1: string; param2?: number }) => {
+      // Implementation
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    },
+  },
+};
+```
+
+### Gitea Workflows
+
+- Location: `.gitea/workflows/` and `workflows/` (mirrored)
+- Use `workflow_dispatch` triggers (not path filters on main branch)
+- Load role-specific credentials from secrets: `SCM_TOKEN_{ROLE}`
+- Set git config per role (name, email)
+- Use `.task.json` sentinel file for task context
+- Run linter agent before PR creation
+
+## Common Tasks
+
+### Adding a New Service
+
+1. Create directory under `services/{name}/`
+2. Add `package.json` with `"type": "module"`
+3. Create `Dockerfile` with multi-stage build
+4. Add to `docker-compose.yml`
+5. Update `.github/workflows/build-images.yml`
+6. Add README.md and update `docs/`
+
+### Adding a New MCP Tool
+
+1. Create in `services/mcp-servers/{server}/src/tools/{name}.ts`
+2. Export from `src/tools/index.ts`
+3. Register in `src/index.ts`
+4. Add tests in `src/tools/__tests__/`
+5. Update server's README.md
+6. Rebuild Docker image
+
+### Modifying Environment Variables
+
+1. Update `services/conductor/src/config.ts` (ConfigSchema)
+2. Add to `.env.example` with documentation comments
+3. Update `docs/getting-started/configuration.md`
+4. Test with `scripts/validate-env.sh`
+
+## Commit Message Format
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer]
+```
+
+**Types**: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
+
+**Examples**:
+- `feat(conductor): add task priority queue`
+- `fix(mcp): resolve session timeout in HTTP transport`
+- `docs: update agent selection matrix`
+- `test(conductor): add webhook signature validation tests`
+
+## PR Instructions
+
+### Before Creating PR
+
+1. **Run tests**: `npm test` in modified service
+2. **Type check**: `npm run typecheck`
+3. **Lint**: `npm run lint`
+4. **Build**: `npm run build` to ensure no build errors
+5. **Test locally**: `docker compose up -d` to verify integration
+
+### PR Title Format
+
+- Use conventional commit format: `<type>(<scope>): <description>`
+- Keep it concise (< 72 characters)
+- Examples:
+  - `feat(gateway): add Anthropic provider fallback`
+  - `fix(mcp-servers): handle connection timeouts gracefully`
+
+### PR Description
+
+Include:
+- **What**: Brief summary of changes
+- **Why**: Motivation or issue number
+- **How**: Implementation approach (if non-obvious)
+- **Testing**: How you tested the changes
+
+### Review Process
+
+- All PRs are reviewed by the Reviewer agent (Reese)
+- Address review comments promptly
+- Tests must pass before merge
+- Maintain backwards compatibility unless version bump
+
+## Security Considerations
+
+- **Never commit secrets**: Use `.env` and environment variables
+- **Validate all inputs**: Use Zod schemas for validation
+- **Webhook signatures**: Verify HMAC signatures on all webhooks
+- **SQL injection**: Use parameterized queries (Drizzle ORM handles this)
+- **Rate limiting**: Respect LLM provider rate limits (handled by LiteLLM)
+
+## Documentation
+
+- **Architecture changes**: Update `docs/architecture/`
+- **New features**: Add to `docs/features/`
+- **API changes**: Update `docs/api/api-reference.md`
+- **Configuration**: Keep `.env.example` in sync with `config.ts`
+
+## Internal Agent Roster (Reference)
+
+CueMarshal's internal agents that execute SDLC tasks:
+
+## Internal Agent Roster (Reference)
+
+CueMarshal's internal agents that execute SDLC tasks:
+
+| Agent | Role | Model Tier | Identity |
+|-------|------|------------|----------|
+| **Ava** (Architect) | System design, architecture decisions | tier3 | agent-architect@cuemarshal.local |
+| **Dave** (Developer) | Feature implementation, bug fixes | tier2 | agent-developer@cuemarshal.local |
+| **Reese** (Reviewer) | Code review, quality checks | tier2 | agent-reviewer@cuemarshal.local |
+| **Tess** (Tester) | Test writing, test execution | tier2 | agent-tester@cuemarshal.local |
+| **Devin** (DevOps) | CI/CD, infrastructure | tier2 | agent-devops@cuemarshal.local |
+| **Dot** (Docs) | Documentation, README updates | tier1 | agent-docs@cuemarshal.local |
+| **Linton** (Linter) | Pre-PR quality checks | tier1 | agent-linter@cuemarshal.local |
+
+**Note**: When working on agent-related features, see `docs/features/agents/overview.md` for complete documentation.
+
+## Helpful Commands Reference
+
+```bash
+# Build all images
+bash scripts/build-images.sh
+
+# Deploy to k3d (local Kubernetes)
+bash scripts/deploy-to-k3d.sh
+
+# Register runners
+bash scripts/register-runners.sh
+
+# Seed labels
+bash scripts/seed-labels.sh
+
+# Simulate workflow request
+bash scripts/simulate-workflow-request.sh
+```
+
+## Getting Help
+
+- **Architecture**: See `docs/architecture/overview.md`
+- **Features**: Browse `docs/features/` for component-specific docs
+- **API Reference**: See `docs/api/api-reference.md`
+- **Configuration**: See `docs/getting-started/configuration.md`
+- **Troubleshooting**: See `docs/operations/troubleshooting-runbook.md`
