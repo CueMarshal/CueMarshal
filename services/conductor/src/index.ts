@@ -105,9 +105,25 @@ async function main() {
     for (let i = 0; i < MAX_RETRIES; i++) {
       try {
         const fs = await import("fs/promises");
-        await fs.access("/tokens/.initialized");
-        logger.info("✓ System initialized");
-        return true;
+        
+        // Check for initialization marker file OR if tokens directory has OAuth client ID
+        // (indicating the init-gitea job has completed and populated the ConfigMap)
+        try {
+          await fs.access("/tokens/.initialized");
+          logger.info("✓ System initialized (marker file found)");
+          return true;
+        } catch {
+          // If marker file doesn't exist, check if tokens have been created by init job
+          // This handles the case where init-gitea job created tokens but the marker file wasn't preserved
+          try {
+            await fs.access("/tokens/oauth2_client_id");
+            logger.info("✓ System initialized (tokens found in ConfigMap)");
+            return true;
+          } catch {
+            // Tokens not ready yet
+            throw new Error("Tokens not yet available");
+          }
+        }
       } catch {
         if (i % 5 === 0) {
           logger.info("Waiting for init-gitea to complete...");

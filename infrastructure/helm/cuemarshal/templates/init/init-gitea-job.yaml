@@ -93,7 +93,8 @@ spec:
           name: {{ include "cuemarshal.fullname" . }}-init-script
           defaultMode: 0755
       - name: tokens
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: {{ include "cuemarshal.fullname" . }}-tokens
       - name: gitea-data
         {{- if .Values.gitea.persistence.enabled }}
         persistentVolumeClaim:

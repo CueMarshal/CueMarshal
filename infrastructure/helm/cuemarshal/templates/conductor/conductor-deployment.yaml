@@ -124,12 +124,11 @@ spec:
           periodSeconds: 10
           timeoutSeconds: 5
         volumeMounts:
-        - name: oauth-config
+        - name: tokens
           mountPath: /tokens
-          readOnly: true
         resources:
           {{- toYaml .Values.conductor.resources | nindent 10 }}
       volumes:
-      - name: oauth-config
-        configMap:
-          name: {{ include "cuemarshal.fullname" . }}-oauth-config
+      - name: tokens
+        persistentVolumeClaim:
+          claimName: {{ include "cuemarshal.fullname" . }}-tokens
