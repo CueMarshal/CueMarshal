@@ -51,7 +51,7 @@ router.post("/", validateMobileToken, async (req: Request, res: Response): Promi
  * GET /api/chat/sessions
  * List chat sessions for the authenticated user
  */
-router.get("/sessions", async (req: Request, res: Response) => {
+router.get("/sessions", validateMobileToken, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id || "anonymous";
 
