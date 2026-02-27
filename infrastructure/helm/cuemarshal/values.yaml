@@ -314,3 +314,22 @@ resourceQuota:
     memory: "32Gi"
     persistentvolumeclaims: "20"
     pods: "50"
+# Probe configuration (liveness/readiness)
+# Override these in local-values.yaml for faster local development
+probes:
+  # Global defaults - adjusted for production
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+  
+  # Component-specific overrides (optional)
+  conductor:
+    readinessInitialDelay: 20
+    livenessInitialDelay: 30
+  gateway:
+    readinessInitialDelay: 20
+    livenessInitialDelay: 30
+  mcp:
+    readinessInitialDelay: 15
+    livenessInitialDelay: 25

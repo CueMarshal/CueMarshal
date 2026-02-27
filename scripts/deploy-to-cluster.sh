@@ -9,10 +9,10 @@ set -euo pipefail
 # build-registry should include org (e.g., ghcr.io/cuemarshal or docker.io/cuemarshal)
 # but the helm-registry passed to Helm will be just the base (ghcr.io or docker.io)
 
+RELEASE_NAME="${RELEASE_NAME:-cuemarshal}"
 CLUSTER_NAME="${CLUSTER_NAME:-dev}"
 BUILD_REGISTRY="${REGISTRY:-ghcr.io/cuemarshal}"
-HELM_REGISTRY="$(echo "$BUILD_REGISTRY" | cut -d'/' -f1-2)"
-TAG="${TAG:-latest}"
+TAG="${TAG:-$(date +%Y%m%d-%H%M%S)}"
 NAMESPACE="${NAMESPACE:-cuemarshal-local}"
 
 # --- Cluster detection -----------------------------------------------------------
@@ -44,7 +44,6 @@ detect_cluster_provider() {
 
     echo ""
 }
-
 PROVIDER="$(detect_cluster_provider)"
 
 if [ -z "$PROVIDER" ]; then
@@ -63,6 +62,16 @@ if [ -z "$PROVIDER" ]; then
     echo "  minikube        — minikube start -p $CLUSTER_NAME"
     exit 1
 fi
+
+# Extract just the registry domain for Helm (e.g., ghcr.io or docker.io)
+# The Helm template will append /cuemarshal/{component}
+HELM_REGISTRY="$(echo "$BUILD_REGISTRY" | cut -d'/' -f1)"
+
+# For Docker Desktop with local images, always use docker.io registry
+if [ "$PROVIDER" = "docker-desktop" ]; then
+    HELM_REGISTRY="docker.io"
+fi
+IMAGE_PULL_POLICY="${IMAGE_PULL_POLICY:-IfNotPresent}"
 
 echo "╔════════════════════════════════════════════════════════════╗"
 echo "║         CueMarshal Cluster Deployment Helper              ║"
@@ -109,21 +118,28 @@ echo "✅ Images loaded into $PROVIDER cluster"
 # Step 3: Deploy Helm chart
 echo ""
 echo "Step 3: Deploying Helm chart..."
-helm upgrade --install "dev-workspace" ./infrastructure/helm/cuemarshal \
+echo "⏳ Note: First deployment may take 10-15 minutes while dependencies initialize"
+helm upgrade --install "$RELEASE_NAME" ./infrastructure/helm/cuemarshal \
   --namespace "$NAMESPACE" \
   --create-namespace \
   --values ./infrastructure/helm/cuemarshal/local-values.yaml \
   --set "image.registry=$HELM_REGISTRY" \
   --set "image.tag=$TAG" \
-  --set "image.pullPolicy=IfNotPresent" \
-  --wait --timeout 5m
+  --set "image.pullPolicy=$IMAGE_PULL_POLICY" \
+  --wait --timeout 15m
 echo "✅ Helm deployment complete"
 
 # Step 4: Wait for pods to be ready
 echo ""
-echo "Step 4: Waiting for pods to be ready..."
-kubectl rollout status -n "$NAMESPACE" deployment/dev-workspace-cuemarshal-conductor --timeout=5m 2>/dev/null || true
-kubectl rollout status -n "$NAMESPACE" deployment/dev-workspace-cuemarshal-gateway --timeout=5m 2>/dev/null || true
+echo "Step 4: Waiting for pods to be ready (this may take a few minutes)..."
+echo "⏳ Tip: Monitor progress in another terminal with:"
+echo "   kubectl get pods -n $NAMESPACE -w"
+echo "   # or"
+echo "   bash scripts/diagnose-deployment.sh $NAMESPACE $RELEASE_NAME"
+echo ""
+
+kubectl rollout status -n "$NAMESPACE" deployment/${RELEASE_NAME}-cuemarshal-conductor --timeout=5m 2>/dev/null || true
+kubectl rollout status -n "$NAMESPACE" deployment/${RELEASE_NAME}-cuemarshal-gateway --timeout=5m 2>/dev/null || true
 
 # Step 5: Show status
 echo ""
@@ -137,17 +153,27 @@ echo "╚═══════════════════════�
 echo ""
 echo "✅ Deployment complete! (provider: $PROVIDER)"
 echo ""
+echo "Pod Status:"
+kubectl get pods -n "$NAMESPACE" -o wide || true
+echo ""
 echo "Access the cluster:"
 echo "  kubectl get pods -n $NAMESPACE"
 echo "  kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=cuemarshal"
+echo ""
+echo "If pods are still initializing, monitor progress with:"
+echo "  bash scripts/diagnose-deployment.sh $NAMESPACE $RELEASE_NAME"
 echo ""
 echo "Get services:"
 echo "  kubectl get svc -n $NAMESPACE"
 echo ""
 echo "Port forward to Gitea:"
-echo "  kubectl port-forward -n $NAMESPACE svc/dev-workspace-cuemarshal-gitea 3000:3000"
+echo "  kubectl port-forward -n $NAMESPACE svc/${RELEASE_NAME}-cuemarshal-gitea 3000:3000"
 echo ""
 echo "Delete deployment:"
-echo "  helm uninstall dev-workspace -n $NAMESPACE"
+echo "  helm uninstall $RELEASE_NAME -n $NAMESPACE"
 echo "  kubectl delete namespace $NAMESPACE"
+echo ""
+echo "📖 For troubleshooting, see:"
+echo "  docs/operations/DEPLOYMENT-TIMEOUT-QUICK-FIX.md"
+echo "  docs/operations/troubleshooting-runbook.md"
 echo ""

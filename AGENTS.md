@@ -316,6 +316,239 @@ CueMarshal's internal agents that execute SDLC tasks:
 
 **Note**: When working on agent-related features, see `docs/features/agents/overview.md` for complete documentation.
 
+## Managing Local Deployments
+
+### Overview
+
+CueMarshal uses a local Kubernetes cluster (typically docker-desktop or minikube) for development and testing. Understanding the deployment workflow and image management is critical for successful local development.
+
+### Key Deployment Concepts
+
+**Image Pull Policy**: The cluster uses `imagePullPolicy: IfNotPresent` by default, which means:
+- Kubernetes will only pull an image if it doesn't exist locally
+- Rebuilding an image with the same tag won't automatically update running pods
+- You must use unique tags or change the pull policy to force updates
+
+**Deployment Script**: Always use `scripts/deploy-to-cluster.sh` for deployments:
+```bash
+# Default deployment with timestamp tag
+bash scripts/deploy-to-cluster.sh
+
+# Deploy with custom tag
+TAG=my-feature-v1 bash scripts/deploy-to-cluster.sh
+
+# Build and deploy specific service
+SERVICE=landing bash scripts/deploy-to-cluster.sh
+```
+
+### Local Deployment Troubleshooting
+
+**Always deploy using the deployment helper script:**
+```bash
+bash scripts/deploy-to-cluster.sh
+```
+
+This ensures that:
+- Image tagging is consistent across all deployments
+- Resource naming follows conventions and avoids conflicts
+- The deployment workflow is identical every time
+- Subsequent deployments don't encounter duplication or naming conflicts
+- The Kubernetes context is properly configured before deployment
+
+**If you detect inconsistencies between deployed code and source code:**
+1. Rebuild images without Docker cache:
+   ```bash
+   bash scripts/build-images.sh --no-cache
+   ```
+2. Deploy to cluster:
+   ```bash
+   bash scripts/deploy-to-cluster.sh
+   ```
+
+Common causes of inconsistencies:
+- **Stale Docker layer cache**: Old layer cache can cause outdated code to persist in images
+- **Interrupted builds**: Partially built images may not reflect source changes
+- **Lingering containers**: Old containers may be reused instead of creating fresh ones
+- **Network issues**: Failed downloads during build can leave incomplete dependencies
+
+The `--no-cache` flag forces a complete rebuild of all layers from scratch, ensuring all changes are reflected in the final image.
+
+### Step-by-Step Deployment Workflow
+
+1. **Make code changes** to your service
+   ```bash
+   cd services/landing  # or any service
+   # Edit files...
+   ```
+
+2. **Build images with unique tag** (handled automatically by deploy script)
+   ```bash
+   # The deploy script automatically generates timestamp tags
+   bash scripts/deploy-to-cluster.sh
+   ```
+
+3. **Verify deployment**
+   ```bash
+   # Check pod status
+   kubectl get pods -n cuemarshal-local
+   
+   # View logs
+   kubectl logs -n cuemarshal-local -l app.kubernetes.io/name=cuemarshal,component=landing
+   
+   # Check deployment status
+   helm status cuemarshal -n cuemarshal-local
+   ```
+
+4. **Test your changes**
+   ```bash
+   # Access the application
+   open http://cuemarshal.local
+   
+   # Or curl specific endpoints
+   curl http://cuemarshal.local/api/health
+   ```
+
+### Common Deployment Issues & Solutions
+
+#### Issue: Pods not picking up new image
+
+**Problem**: You rebuilt the image but pods are still running old code.
+
+**Solution**:
+```bash
+# Option 1: Use deploy script (recommended)
+bash scripts/deploy-to-cluster.sh
+
+# Option 2: Manual rebuild with unique tag
+REGISTRY='ghcr.io/cuemarshal' TAG=$(date +%Y%m%d-%H%M%S) bash scripts/build-images.sh
+helm upgrade --install cuemarshal infrastructure/helm/cuemarshal \
+  --values infrastructure/helm/cuemarshal/local-values.yaml \
+  --namespace cuemarshal-local \
+  --set image.tag=$(date +%Y%m%d-%H%M%S)
+
+# Option 3: Force pull with imagePullPolicy
+kubectl patch deployment cuemarshal-landing -n cuemarshal-local \
+  --type='json' \
+  -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/imagePullPolicy", "value":"Always"}]'
+kubectl delete pods -n cuemarshal-local -l component=landing --grace-period=0 --force
+```
+
+#### Issue: Image pull errors (ErrImagePull, ErrImageNeverPull)
+
+**Problem**: Kubernetes can't find the image with the specified tag.
+
+**Solution**:
+```bash
+# Verify image exists locally
+docker images | grep cuemarshal
+
+# Check registry prefix matches deployment
+# If using local images, ensure registry is ghcr.io/cuemarshal or docker.io/cuemarshal
+# Verify image tag matches deployment spec
+kubectl get deployment cuemarshal-landing -n cuemarshal-local -o jsonpath='{.spec.template.spec.containers[0].image}'
+```
+
+#### Issue: Helm upgrade hangs or fails
+
+**Problem**: Previous Helm operation is pending or locked.
+
+**Solution**:
+```bash
+# Check Helm release status
+helm status cuemarshal -n cuemarshal-local
+
+# If stuck, uninstall and reinstall
+helm uninstall cuemarshal -n cuemarshal-local
+bash scripts/deploy-to-cluster.sh
+
+# Check for pending releases
+helm list -n cuemarshal-local --pending
+```
+
+### Best Practices
+
+1. **Always use the deploy script**: `scripts/deploy-to-cluster.sh` handles tag generation, image building, and deployment correctly.
+
+2. **Unique tags for each deployment**: The deploy script auto-generates timestamp tags to ensure fresh deployments.
+
+3. **Verify before deploying**: Run tests locally first:
+   ```bash
+   cd services/conductor
+   npm test
+   npm run typecheck
+   ```
+
+4. **Check pod logs immediately**: After deployment, verify services started correctly:
+   ```bash
+   kubectl logs -n cuemarshal-local -l component=conductor --tail=50 -f
+   ```
+
+5. **Test incrementally**: Deploy one service at a time when debugging issues.
+
+6. **Clean up failed deployments**: If deployment fails, clean up before retrying:
+   ```bash
+   helm uninstall cuemarshal -n cuemarshal-local
+   kubectl delete namespace cuemarshal-local  # Only if needed
+   bash scripts/deploy-to-cluster.sh
+   ```
+
+### Advanced Deployment Scenarios
+
+#### Deploying a Single Service
+
+```bash
+# Build only the landing service
+cd services/landing
+docker build -t ghcr.io/cuemarshal/landing:my-fix .
+
+# Tag as latest and force update
+docker tag ghcr.io/cuemarshal/landing:my-fix ghcr.io/cuemarshal/landing:latest
+kubectl patch deployment cuemarshal-landing -n cuemarshal-local \
+  --type='json' \
+  -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/imagePullPolicy", "value":"Always"}]'
+kubectl delete pods -n cuemarshal-local -l component=landing --force --grace-period=0
+```
+
+#### Inspecting Container Contents
+
+```bash
+# List files in running pod
+POD=$(kubectl get pods -n cuemarshal-local -l component=landing -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n cuemarshal-local $POD -- ls -la /usr/share/nginx/html
+
+# Check specific directory structure
+kubectl exec -n cuemarshal-local $POD -- find /usr/share/nginx/html -type d
+
+# View file contents
+kubectl exec -n cuemarshal-local $POD -- cat /usr/share/nginx/html/index.html
+```
+
+#### Rolling Back Deployments
+
+```bash
+# View Helm release history
+helm history cuemarshal -n cuemarshal-local
+
+# Rollback to previous version
+helm rollback cuemarshal -n cuemarshal-local
+
+# Rollback to specific revision
+helm rollback cuemarshal 3 -n cuemarshal-local
+```
+
+### Debugging Checklist
+
+When deployments fail or services don't work as expected:
+
+- [ ] Check pod status: `kubectl get pods -n cuemarshal-local`
+- [ ] View pod logs: `kubectl logs -n cuemarshal-local <pod-name>`
+- [ ] Verify image tag: `kubectl describe pod -n cuemarshal-local <pod-name>`
+- [ ] Check service endpoints: `kubectl get svc -n cuemarshal-local`
+- [ ] Verify ingress/routes: `kubectl get ingress -n cuemarshal-local`
+- [ ] Test connectivity: `kubectl run -it --rm debug --image=busybox --restart=Never -n cuemarshal-local -- wget -O- http://landing:3000`
+- [ ] Check resource limits: `kubectl top pods -n cuemarshal-local`
+- [ ] Review Helm values: `helm get values cuemarshal -n cuemarshal-local`
+
 ## Helpful Commands Reference
 
 ```bash

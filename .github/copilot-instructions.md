@@ -252,6 +252,47 @@ docs/
 4. Test fallback chain with `scripts/test-gateway-fallback.sh`
 5. Verify cost tracking in conductor database
 
+## Local Deployment Best Practices
+
+### Always Use the Deployment Helper Script
+
+When deploying to a local Kubernetes cluster, **always use the deployment helper script**:
+
+```bash
+bash scripts/deploy-to-cluster.sh
+```
+
+This ensures that:
+- Image tagging is consistent and uses unique timestamps
+- Resource naming follows conventions and avoids conflicts
+- The deployment workflow is identical every time
+- Subsequent deployments don't encounter duplication
+- The correct Kubernetes context is configured before deployment
+
+**Never bypass this script** — manually building images or running helm commands can lead to image versioning issues and resource conflicts.
+
+### Resolving Code/Deployment Inconsistencies
+
+If you detect inconsistencies between deployed code and source code:
+
+1. **Rebuild images without Docker cache** to force a complete rebuild:
+   ```bash
+   bash scripts/build-images.sh --no-cache
+   ```
+
+2. **Redeploy to the cluster** with fresh images:
+   ```bash
+   bash scripts/deploy-to-cluster.sh
+   ```
+
+**Common causes of inconsistencies:**
+- **Stale Docker layer cache** — Old cached layers contain outdated code
+- **Interrupted builds** — Partially built images don't reflect all changes
+- **Lingering containers** — Kubernetes reuses old containers instead of deploying new ones
+- **Network disruptions** — Failed downloads during build leave incomplete dependencies
+
+The `--no-cache` flag rebuilds all layers from scratch, ensuring every change in the source code is reflected in the deployment.
+
 ## Common Patterns
 
 ### Environment Variable Validation
