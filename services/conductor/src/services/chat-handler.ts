@@ -64,6 +64,7 @@ export interface ChatMessage {
   content: string;
   tool_calls?: Array<{
     id: string;
+    type: "function";
     function: { name: string; arguments: string };
   }>;
   tool_call_id?: string;
@@ -132,6 +133,17 @@ export class ChatHandler {
         "Executing tool calls"
       );
 
+      // Add assistant message with tool_calls to history (required by OpenAI API)
+      history.push({
+        role: "assistant",
+        content: assistantMessage.content || null,
+        tool_calls: assistantMessage.tool_calls.map((tc) => ({
+          id: tc.id,
+          type: "function" as const,
+          function: { name: tc.function.name, arguments: tc.function.arguments },
+        })),
+      } as any);
+
       // Execute each tool call
       for (const toolCall of assistantMessage.tool_calls) {
         const toolName = toolCall.function.name;
@@ -185,6 +197,7 @@ export class ChatHandler {
       sessionId,
       role: "assistant",
       content: finalContent,
+      toolCalls: assistantMessage?.tool_calls ? assistantMessage.tool_calls : null,
     });
 
     // Auto-generate title for new sessions (first message)
@@ -277,6 +290,7 @@ export class ChatHandler {
         content: chunkContent || null,
         tool_calls: toolCallEntries.map((tc) => ({
           id: tc.id,
+          type: "function" as const,
           function: { name: tc.name, arguments: tc.args },
         })),
       } as any);
@@ -321,6 +335,7 @@ export class ChatHandler {
         sessionId,
         role: "assistant",
         content: finalContent,
+        toolCalls: toolCallsSummary.length > 0 ? toolCallsSummary : null,
       });
 
       await this.maybeGenerateTitle(sessionId, input.message);
@@ -369,6 +384,7 @@ export class ChatHandler {
     return messages.map((msg) => ({
       role: msg.role as "user" | "assistant" | "tool",
       content: msg.content || "",
+      tool_calls: msg.toolCalls as any,
       tool_call_id: msg.toolCallId ?? undefined,
     }));
   }

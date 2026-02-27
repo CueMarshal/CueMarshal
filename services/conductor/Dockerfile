@@ -30,12 +30,9 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/package-lock.json ./
 RUN npm ci --omit=dev
 
-# Copy built files and migrations
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/src/db/migrations ./src/db/migrations
-
-# Non-root user (node:22-alpine already has uid/gid 1000 as 'node')
-RUN chown -R node:node /app
+# Copy built files and migrations with correct ownership
+COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/src/db/migrations ./src/db/migrations
 
 USER node
 
