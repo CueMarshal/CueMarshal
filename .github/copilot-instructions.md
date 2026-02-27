@@ -271,6 +271,8 @@ This ensures that:
 
 **Never bypass this script** — manually building images or running helm commands can lead to image versioning issues and resource conflicts.
 
+**Registry consistency rule:** Keep Helm image registry aligned with build registry. On Docker Desktop, do not hard-force Helm to `docker.io` if images were built as `ghcr.io/cuemarshal/*`; this creates image references Kubernetes cannot resolve from local tags.
+
 ### Resolving Code/Deployment Inconsistencies
 
 If you detect inconsistencies between deployed code and source code:

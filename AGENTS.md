@@ -468,24 +468,25 @@ helm list -n cuemarshal-local --pending
 ### Best Practices
 
 1. **Always use the deploy script**: `scripts/deploy-to-cluster.sh` handles tag generation, image building, and deployment correctly.
+2. **Keep build/helm registry aligned**: Do not force `HELM_REGISTRY=docker.io` for Docker Desktop when images are built as `ghcr.io/cuemarshal/*`; this causes pods to reference tags that are not present locally.
 
-2. **Unique tags for each deployment**: The deploy script auto-generates timestamp tags to ensure fresh deployments.
+3. **Unique tags for each deployment**: The deploy script auto-generates timestamp tags to ensure fresh deployments.
 
-3. **Verify before deploying**: Run tests locally first:
+4. **Verify before deploying**: Run tests locally first:
    ```bash
    cd services/conductor
    npm test
    npm run typecheck
    ```
 
-4. **Check pod logs immediately**: After deployment, verify services started correctly:
+5. **Check pod logs immediately**: After deployment, verify services started correctly:
    ```bash
    kubectl logs -n cuemarshal-local -l component=conductor --tail=50 -f
    ```
 
-5. **Test incrementally**: Deploy one service at a time when debugging issues.
+6. **Test incrementally**: Deploy one service at a time when debugging issues.
 
-6. **Clean up failed deployments**: If deployment fails, clean up before retrying:
+7. **Clean up failed deployments**: If deployment fails, clean up before retrying:
    ```bash
    helm uninstall cuemarshal -n cuemarshal-local
    kubectl delete namespace cuemarshal-local  # Only if needed

@@ -67,10 +67,9 @@ fi
 # The Helm template will append /cuemarshal/{component}
 HELM_REGISTRY="$(echo "$BUILD_REGISTRY" | cut -d'/' -f1)"
 
-# For Docker Desktop with local images, always use docker.io registry
-if [ "$PROVIDER" = "docker-desktop" ]; then
-    HELM_REGISTRY="docker.io"
-fi
+# Note: For Docker Desktop, images are built in the shared Docker daemon
+# with the BUILD_REGISTRY prefix, so HELM_REGISTRY must match to allow 
+# Kubernetes to find them locally with imagePullPolicy: IfNotPresent
 IMAGE_PULL_POLICY="${IMAGE_PULL_POLICY:-IfNotPresent}"
 
 echo "╔════════════════════════════════════════════════════════════╗"
