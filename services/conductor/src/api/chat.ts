@@ -13,6 +13,57 @@ import { eq, and } from "drizzle-orm";
 const router = Router();
 
 /**
+ * POST /api/chat/stream
+ * Stream an LLM-powered response as Server-Sent Events
+ */
+router.post("/stream", validateMobileToken, async (req: Request, res: Response): Promise<void> => {
+  const { session_id, message } = req.body;
+  const userId = (req as any).user?.id || "anonymous";
+  const authToken = (req as any).authToken as string | undefined;
+
+  if (!message || typeof message !== "string") {
+    res.status(422).json({ error: { code: "VALIDATION_ERROR", message: "Message is required" } });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const write = (data: unknown) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    await chatHandler.streamMessage(
+      { userId, sessionId: session_id, message, authToken },
+      {
+        onChunk: (chunk) => write(chunk),
+        onDone: (result) => {
+          write({ type: "done", ...result });
+          res.end();
+        },
+        onError: (error) => {
+          logger.error({ error }, "Stream error");
+          write({ type: "error", message: error.message });
+          res.end();
+        },
+      },
+    );
+  } catch (error) {
+    logger.error({ error }, "Chat stream request failed");
+    if (!res.headersSent) {
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Streaming failed" } });
+    } else {
+      write({ type: "error", message: "Streaming failed" });
+      res.end();
+    }
+  }
+});
+
+/**
  * POST /api/chat
  * Send a natural language message and receive MCP-powered response
  * Requires authentication via Bearer token
@@ -124,11 +175,15 @@ router.get("/sessions/:id", validateMobileToken, async (req: Request, res: Respo
 
     res.json({
       session_id: sessionId,
-      messages: messages.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-        timestamp: msg.createdAt,
-      })),
+      title: session.title,
+      messages: messages
+        .filter((msg) => msg.role !== "tool")
+        .map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+          tool_calls: msg.toolCalls || undefined,
+          timestamp: msg.createdAt,
+        })),
     });
   } catch (error) {
     logger.error({ error }, "Failed to fetch chat history");

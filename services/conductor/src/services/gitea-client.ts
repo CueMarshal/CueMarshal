@@ -98,6 +98,15 @@ export class GiteaClient {
   }
 
   /**
+   * Create a client instance using a raw Gitea/OAuth token (e.g. user's token).
+   */
+  static withToken(token: string): GiteaClient {
+    const client = new GiteaClient();
+    client.token = token;
+    return client;
+  }
+
+  /**
    * Create a new repository in an organization
    */
   async createRepo(
@@ -313,6 +322,16 @@ export class GiteaClient {
     return this.request("GET", `/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}`);
   }
 
+  async listBranches(owner: string, repo: string, params?: {
+    page?: number;
+    limit?: number;
+  }) {
+    const queryParams = new URLSearchParams();
+    queryParams.append("page", String(params?.page || 1));
+    queryParams.append("limit", String(params?.limit || 50));
+    return this.request("GET", `/repos/${owner}/${repo}/branches?${queryParams}`);
+  }
+
   // Pull request operations
   async createPullRequest(owner: string, repo: string, data: {
     title: string;
@@ -323,6 +342,20 @@ export class GiteaClient {
     assignees?: string[];
   }) {
     return this.request("POST", `/repos/${owner}/${repo}/pulls`, data);
+  }
+
+  async listPullRequests(owner: string, repo: string, params?: {
+    state?: "open" | "closed" | "all";
+    page?: number;
+    limit?: number;
+    sort?: string;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params?.state) queryParams.append("state", params.state);
+    queryParams.append("page", String(params?.page || 1));
+    queryParams.append("limit", String(params?.limit || 20));
+    if (params?.sort) queryParams.append("sort", params.sort);
+    return this.request("GET", `/repos/${owner}/${repo}/pulls?${queryParams}`);
   }
 
   async getPullRequest(owner: string, repo: string, prNumber: number) {

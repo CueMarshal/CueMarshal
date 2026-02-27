@@ -69,6 +69,12 @@ export interface ChatMessage {
   tool_call_id?: string;
 }
 
+export interface StreamCallbacks {
+  onChunk: (chunk: { type: "text" | "tool_call" | "session_id"; delta?: string; tool?: string; result_summary?: string; session_id?: string }) => void;
+  onDone: (fullResponse: { sessionId: string; content: string; toolCallsSummary?: Array<{ tool: string; result_summary: string }> }) => void;
+  onError: (error: Error) => void;
+}
+
 export class ChatHandler {
   /**
    * Process a chat message with MCP tool support
@@ -181,6 +187,9 @@ export class ChatHandler {
       content: finalContent,
     });
 
+    // Auto-generate title for new sessions (first message)
+    await this.maybeGenerateTitle(sessionId, input.message);
+
     return {
       sessionId,
       message: {
@@ -189,6 +198,165 @@ export class ChatHandler {
       },
       toolCallsSummary: toolCallsSummary.length > 0 ? toolCallsSummary : undefined,
     };
+  }
+
+  /**
+   * Stream a chat message response via SSE callbacks.
+   * Text content is streamed token-by-token; tool calls are emitted as discrete events.
+   */
+  async streamMessage(
+    input: { userId: string; sessionId?: string; message: string; authToken?: string },
+    callbacks: StreamCallbacks,
+  ): Promise<void> {
+    let sessionId = input.sessionId;
+    if (!sessionId) {
+      const [session] = await db
+        .insert(chatSessions)
+        .values({ userId: input.userId })
+        .returning();
+      sessionId = session.id;
+    }
+
+    callbacks.onChunk({ type: "session_id", session_id: sessionId });
+
+    const history = await this.loadHistory(sessionId);
+
+    await db.insert(chatMessages).values({
+      sessionId,
+      role: "user",
+      content: input.message,
+    });
+
+    history.push({ role: "user", content: input.message });
+
+    const tools = mcpRegistry.getToolDefinitions();
+    const toolCallsSummary: Array<{ tool: string; result_summary: string }> = [];
+    let fullContent = "";
+
+    const streamOnce = async (): Promise<boolean> => {
+      const stream = await gateway.chat.completions.create({
+        model: config.chatModel,
+        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...history] as any,
+        tools,
+        tool_choice: "auto",
+        stream: true,
+      });
+
+      let pendingToolCalls: Record<number, { id: string; name: string; args: string }> = {};
+      let chunkContent = "";
+
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta;
+        if (!delta) continue;
+
+        if (delta.content) {
+          chunkContent += delta.content;
+          fullContent += delta.content;
+          callbacks.onChunk({ type: "text", delta: delta.content });
+        }
+
+        if (delta.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            const idx = tc.index;
+            if (!pendingToolCalls[idx]) {
+              pendingToolCalls[idx] = { id: tc.id || "", name: tc.function?.name || "", args: "" };
+            }
+            if (tc.id) pendingToolCalls[idx].id = tc.id;
+            if (tc.function?.name) pendingToolCalls[idx].name = tc.function.name;
+            if (tc.function?.arguments) pendingToolCalls[idx].args += tc.function.arguments;
+          }
+        }
+      }
+
+      const toolCallEntries = Object.values(pendingToolCalls);
+      if (toolCallEntries.length === 0) return false; // no more tool calls, done
+
+      // Add assistant message with tool_calls to history (required by OpenAI API)
+      history.push({
+        role: "assistant",
+        content: chunkContent || null,
+        tool_calls: toolCallEntries.map((tc) => ({
+          id: tc.id,
+          function: { name: tc.name, arguments: tc.args },
+        })),
+      } as any);
+
+      // Execute tool calls
+      for (const tc of toolCallEntries) {
+        const toolArgs = JSON.parse(tc.args);
+        if (input.authToken && tc.name.startsWith("gitea_") && !toolArgs.authToken) {
+          toolArgs.authToken = input.authToken;
+        }
+
+        try {
+          const result = await mcpRegistry.executeTool(tc.name, toolArgs);
+          const resultText = this.extractTextFromMCPResponse(result);
+          history.push({ role: "tool", content: resultText, tool_call_id: tc.id });
+
+          const summary = this.summarizeResult(tc.name, resultText);
+          toolCallsSummary.push({ tool: tc.name, result_summary: summary });
+          callbacks.onChunk({ type: "tool_call", tool: tc.name, result_summary: summary });
+        } catch (error) {
+          logger.error({ error, tool: tc.name }, "Streaming tool execution failed");
+          history.push({
+            role: "tool",
+            content: `Error executing ${tc.name}: ${(error as Error).message}`,
+            tool_call_id: tc.id,
+          });
+          callbacks.onChunk({ type: "tool_call", tool: tc.name, result_summary: "Failed" });
+        }
+      }
+
+      return true; // more rounds may follow
+    };
+
+    try {
+      let hasMoreToolCalls = true;
+      while (hasMoreToolCalls) {
+        hasMoreToolCalls = await streamOnce();
+      }
+
+      const finalContent = fullContent || "I apologize, I encountered an issue.";
+      await db.insert(chatMessages).values({
+        sessionId,
+        role: "assistant",
+        content: finalContent,
+      });
+
+      await this.maybeGenerateTitle(sessionId, input.message);
+
+      callbacks.onDone({
+        sessionId,
+        content: finalContent,
+        toolCallsSummary: toolCallsSummary.length > 0 ? toolCallsSummary : undefined,
+      });
+    } catch (error) {
+      callbacks.onError(error as Error);
+    }
+  }
+
+  /**
+   * Auto-generate a session title from the first user message if none exists yet.
+   */
+  private async maybeGenerateTitle(sessionId: string, userMessage: string): Promise<void> {
+    try {
+      const session = await db.query.chatSessions.findFirst({
+        where: eq(chatSessions.id, sessionId),
+      });
+      if (session?.title) return;
+
+      // Simple heuristic: use first ~60 chars of the first message
+      const title = userMessage.length > 60
+        ? userMessage.substring(0, 57) + "..."
+        : userMessage;
+
+      await db
+        .update(chatSessions)
+        .set({ title, updatedAt: new Date() })
+        .where(eq(chatSessions.id, sessionId));
+    } catch (error) {
+      logger.warn({ error, sessionId }, "Failed to auto-generate session title");
+    }
   }
 
   private async loadHistory(sessionId: string): Promise<ChatMessage[]> {

@@ -1,11 +1,19 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-cuemarshal-navy: #1F2A44;
   --color-cuemarshal-blue: #00A1F0;
   --color-cuemarshal-white: #FFFFFF;
   --color-cuemarshal-grey: #F4F5F7;
   --color-cuemarshal-charcoal: #333D55;
+  --color-dark-bg: #0F1219;
+  --color-dark-surface: #1A1F2E;
+  --color-dark-card: #232838;
+  --color-dark-border: #2E3447;
+  --color-dark-text: #E2E8F0;
+  --color-dark-muted: #94A3B8;
   --font-montserrat: "Montserrat", sans-serif;
   --font-inter: "Inter", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
@@ -33,6 +41,7 @@
   html {
     scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
   body {
     background-color: var(--color-cuemarshal-white);
@@ -40,6 +49,10 @@
     font-family: var(--font-inter);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+  .dark body {
+    background-color: var(--color-dark-bg);
+    color: var(--color-dark-text);
   }
 }
 

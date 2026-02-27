@@ -9,6 +9,7 @@ import chatRouter from "./chat.js";
 import authRouter from "./auth.js";
 import mobileRouter from "./mobile.js";
 import internalRouter from "./internal.js";
+import projectsRouter from "./projects.js";
 import { logger } from "../utils/logger.js";
 
 // Cache the oauth2 client ID in memory (it rarely changes)
@@ -32,6 +33,9 @@ export function registerRoutes(app: Express) {
 
   // Mobile and chat APIs
   app.use("/api/chat", chatRouter);
+
+  // Project board APIs
+  app.use("/api/projects", projectsRouter);
 
   // BFF auth endpoints (server-side OAuth2 – clients never need the client ID)
   app.use("/api/auth", authRouter);

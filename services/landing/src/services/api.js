@@ -39,6 +39,82 @@ export async function sendChatMessage(message, sessionId = null) {
 }
 
 /**
+ * Stream a chat message response via SSE.
+ * @param {string} message
+ * @param {string|null} sessionId
+ * @param {Object} callbacks - { onChunk, onDone, onError }
+ * @returns {Promise<void>}
+ */
+export async function streamChatMessage(message, sessionId, { onChunk, onDone, onError }) {
+  const token = await storage.getToken();
+  const body = JSON.stringify({
+    message,
+    session_id: sessionId || undefined,
+  });
+
+  const response = await fetch(`${config.conductorUrl}/chat/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `Stream failed: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.type === 'done') {
+          onDone(data);
+        } else if (data.type === 'error') {
+          onError(new Error(data.message));
+        } else {
+          onChunk(data);
+        }
+      } catch {
+        // ignore malformed SSE lines
+      }
+    }
+  }
+}
+
+/**
+ * Fetch Kanban board data for a repository.
+ * @param {string|null} repo - "owner/name" format, or null for default
+ */
+export async function fetchProjectBoard(repo = null) {
+  const params = repo ? `?repo=${encodeURIComponent(repo)}` : '';
+  const res = await api.get(`/projects/board${params}`);
+  return res.data;
+}
+
+/**
+ * List organization repositories for the repo picker.
+ */
+export async function fetchProjectRepos() {
+  const res = await api.get('/projects/repos');
+  return res.data;
+}
+
+/**
  * List chat sessions for the current user.
  */
 export async function fetchChatSessions() {

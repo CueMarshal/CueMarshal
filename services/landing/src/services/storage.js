@@ -6,6 +6,7 @@ const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 const SESSION_ID_KEY = 'chat_session_id';
 const SESSIONS_LIST_KEY = 'chat_sessions_list';
+const THEME_KEY = 'ui_theme';
 
 export const storage = {
   /**
@@ -92,6 +93,20 @@ export const storage = {
    */
   async clearSessionsList() {
     localStorage.removeItem(SESSIONS_LIST_KEY);
+  },
+
+  /**
+   * Save theme preference ('light', 'dark', or 'system')
+   */
+  async saveTheme(theme) {
+    localStorage.setItem(THEME_KEY, theme);
+  },
+
+  /**
+   * Get theme preference
+   */
+  async getTheme() {
+    return localStorage.getItem(THEME_KEY) || 'system';
   },
 
   /**

@@ -74,7 +74,7 @@ export default function SessionSidebar({
     return (
       <div className="fixed inset-0 z-50 md:hidden">
         <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={onClose} />
-        <div className="absolute left-0 top-0 bottom-0 w-[min(280px,85vw)] bg-white flex flex-col shadow-2xl animate-slide-in-left">
+        <div className="absolute left-0 top-0 bottom-0 w-[min(280px,85vw)] bg-white dark:bg-dark-surface flex flex-col shadow-2xl animate-slide-in-left">
           {renderContent(true)}
         </div>
       </div>
@@ -82,7 +82,7 @@ export default function SessionSidebar({
   }
 
   return (
-    <div className="flex flex-col h-full bg-white w-full">
+    <div className="flex flex-col h-full bg-white dark:bg-dark-surface w-full">
       {renderContent(false)}
     </div>
   );
@@ -91,8 +91,8 @@ export default function SessionSidebar({
     return (
       <>
         {/* Header */}
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0">
-          <h3 className="font-semibold text-cuemarshal-navy text-sm uppercase tracking-wider">Chat History</h3>
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-dark-border flex items-center justify-between shrink-0">
+          <h3 className="font-semibold text-cuemarshal-navy dark:text-white text-sm uppercase tracking-wider">Chat History</h3>
           {showCloseButton && (
             <button
               onClick={onClose}
@@ -124,7 +124,8 @@ export default function SessionSidebar({
               placeholder="Search conversations..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-cuemarshal-blue focus:ring-1 focus:ring-cuemarshal-blue transition-all placeholder:text-gray-400"
+              data-sidebar-search
+              className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-lg outline-none focus:border-cuemarshal-blue focus:ring-1 focus:ring-cuemarshal-blue transition-all placeholder:text-gray-400 dark:text-dark-text"
             />
           </div>
         </div>
@@ -156,8 +157,8 @@ export default function SessionSidebar({
                     onClick={() => onSelectSession(session.id)}
                     className={`group relative px-3 py-2.5 mx-2 mb-0.5 rounded-lg cursor-pointer transition-all ${
                       isActive
-                        ? 'bg-cuemarshal-blue/10 border-l-2 border-cuemarshal-blue'
-                        : 'hover:bg-gray-50 border-l-2 border-transparent'
+                        ? 'bg-cuemarshal-blue/10 dark:bg-cuemarshal-blue/20 border-l-2 border-cuemarshal-blue'
+                        : 'hover:bg-gray-50 dark:hover:bg-dark-card border-l-2 border-transparent'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -212,7 +213,7 @@ export default function SessionSidebar({
         </div>
 
         {/* Footer */}
-        <div className="p-3 border-t border-gray-100 text-center shrink-0">
+        <div className="p-3 border-t border-gray-100 dark:border-dark-border text-center shrink-0">
           <div className="text-[11px] text-gray-400 font-medium">
             Powered by CueMarshal
           </div>
