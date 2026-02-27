@@ -14,6 +14,7 @@ CLUSTER_NAME="${CLUSTER_NAME:-dev}"
 BUILD_REGISTRY="${REGISTRY:-ghcr.io/cuemarshal}"
 TAG="${TAG:-$(date +%Y%m%d-%H%M%S)}"
 NAMESPACE="${NAMESPACE:-cuemarshal-local}"
+NO_CACHE="${NO_CACHE:-false}"
 
 # --- Cluster detection -----------------------------------------------------------
 
@@ -111,6 +112,7 @@ echo ""
 echo "Step 2: Building Docker images and loading into cluster..."
 REGISTRY="$BUILD_REGISTRY" TAG="$TAG" \
     CLUSTER_PROVIDER="$PROVIDER" CLUSTER_NAME="$CLUSTER_NAME" \
+    NO_CACHE="$NO_CACHE" \
     bash scripts/build-images.sh
 echo "✅ Images loaded into $PROVIDER cluster"
 

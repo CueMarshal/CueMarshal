@@ -16,19 +16,10 @@ CLUSTER_PROVIDER="${CLUSTER_PROVIDER:-}"
 CLUSTER_NAME="${CLUSTER_NAME:-dev}"
 DOCKER_BUILD_ARGS=""
 
-# Parse command-line arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --no-cache)
-            DOCKER_BUILD_ARGS="--no-cache"
-            shift
-            ;;
-        *)
-            echo "Unknown option: $1"
-            exit 1
-            ;;
-    esac
-done
+# Set --no-cache if requested
+if [ "${NO_CACHE:-false}" = "true" ]; then
+    DOCKER_BUILD_ARGS="--no-cache"
+fi
 
 echo "Building CueMarshal images..."
 echo "Registry: $REGISTRY"
