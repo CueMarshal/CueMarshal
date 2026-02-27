@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Activity, AlertCircle } from 'lucide-react';
+import { Activity, AlertCircle, Loader2 } from 'lucide-react';
 import { fetchAgentActivity } from '../../services/api';
 
 const AGENTS = [
@@ -201,64 +201,100 @@ export default function ActivityView() {
           })}
         </div>
 
-        {/* Pipeline Summary */}
-        <div className="mt-6 rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-cuemarshal-navy text-gray-300 font-mono text-xs w-full">
-          <div className="flex items-center justify-between px-3 py-2 bg-gray-900 border-b border-gray-800">
-            <div className="flex gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-              <div className="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
-              <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+        {/* Team Pulse Feed */}
+        <div className="mt-6 flex flex-col gap-4">
+          <h3 className="font-montserrat font-bold text-lg text-cuemarshal-navy flex items-center gap-2">
+            <div className="relative flex h-3 w-3">
+              {pipelineActive && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>}
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${pipelineActive ? 'bg-green-500' : 'bg-gray-300'}`}></span>
             </div>
-            <div className="text-gray-500 text-[10px]">cuemarshal/pipeline</div>
-          </div>
-          <div className="p-4 space-y-1.5 min-h-[100px]">
+            Team Pulse
+          </h3>
+          
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 min-h-[120px] flex flex-col gap-3 transition-all duration-300">
             {pipeline ? (
               <>
-                <div className={pipelineActive ? 'text-green-400' : 'text-gray-400'}>
-                  {pipelineActive
-                    ? `Pipeline running: ${pipeline.active_jobs} active job${pipeline.active_jobs !== 1 ? 's' : ''}, ${pipeline.queued_jobs} queued`
-                    : 'Pipeline idle. No active jobs.'}
-                </div>
-                {Object.entries(agentData).map(([role, info]) => {
-                  if (info.status === 'idle' && !info.recent_completed) return null;
-                  const agentDef = AGENTS.find((a) => {
-                    for (const [r, id] of Object.entries(ROLE_TO_ID)) {
-                      if (r === role && id === a.id) return true;
-                    }
-                    return false;
-                  });
-                  const name = agentDef?.name || role;
-                  if (info.status === 'working') {
-                    return (
-                      <div key={role} className="text-blue-400">
-                        [{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}] {name}: Working on {info.active_tasks} task{info.active_tasks !== 1 ? 's' : ''}...
-                      </div>
-                    );
-                  }
-                  if (info.status === 'reviewing') {
-                    return (
-                      <div key={role} className="text-amber-400">
-                        [{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}] {name}: Reviewing {info.active_tasks} task{info.active_tasks !== 1 ? 's' : ''}...
-                      </div>
-                    );
-                  }
-                  if (info.recent_completed) {
-                    return (
-                      <div key={role} className="text-green-400 opacity-70">
-                        {name}: Completed {info.recent_completed} task{info.recent_completed !== 1 ? 's' : ''} in the last hour
-                      </div>
-                    );
-                  }
-                  return null;
-                })}
-                {lastUpdated && (
-                  <div className="text-gray-500 mt-2 text-[10px]">
-                    Last updated: {new Date(lastUpdated).toLocaleTimeString()}
-                  </div>
-                )}
+                 {/* Pipeline Status Banner */}
+                 <div className={`text-sm font-medium px-3 py-2 rounded-lg flex items-center gap-2 transition-colors duration-300 ${pipelineActive ? 'bg-blue-50 text-cuemarshal-blue border border-blue-100' : 'bg-gray-50 text-gray-500 border border-gray-100'}`}>
+                    {pipelineActive ? (
+                      <>
+                        <Loader2 className="animate-spin w-4 h-4" />
+                        <span>{pipeline.active_jobs} active job{pipeline.active_jobs !== 1 ? 's' : ''}, {pipeline.queued_jobs} queued</span>
+                      </>
+                    ) : (
+                      <span>All systems operational. Standing by for tasks.</span>
+                    )}
+                 </div>
+
+                 {/* Agent Activities Feed */}
+                 <div className="space-y-3 pl-1 mt-1">
+                   {Object.entries(agentData).map(([role, info]) => {
+                      if (info.status === 'idle' && !info.recent_completed) return null;
+                      
+                      const agentDef = AGENTS.find((a) => {
+                        for (const [r, id] of Object.entries(ROLE_TO_ID)) {
+                          if (r === role && id === a.id) return true;
+                        }
+                        return false;
+                      });
+                      const name = agentDef?.name || role;
+                      
+                      if (info.status === 'working') {
+                        return (
+                          <div key={role} className="flex items-start gap-3 text-sm animate-in fade-in slide-in-from-bottom-1 duration-300">
+                             <div className="mt-1.5 w-2 h-2 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+                             <div className="flex-1">
+                               <span className="font-semibold text-gray-800">{name}</span>
+                               <span className="text-gray-600"> is working on </span>
+                               <span className="font-medium text-blue-600">{info.active_tasks} task{info.active_tasks !== 1 ? 's' : ''}</span>
+                             </div>
+                             <span className="text-xs text-gray-400 tabular-nums font-mono">Now</span>
+                          </div>
+                        );
+                      }
+                      
+                      if (info.status === 'reviewing') {
+                        return (
+                          <div key={role} className="flex items-start gap-3 text-sm animate-in fade-in slide-in-from-bottom-1 duration-300">
+                             <div className="mt-1.5 w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                             <div className="flex-1">
+                               <span className="font-semibold text-gray-800">{name}</span>
+                               <span className="text-gray-600"> is reviewing </span>
+                               <span className="font-medium text-amber-600">{info.active_tasks} task{info.active_tasks !== 1 ? 's' : ''}</span>
+                             </div>
+                             <span className="text-xs text-gray-400 tabular-nums font-mono">Now</span>
+                          </div>
+                        );
+                      }
+
+                      if (info.recent_completed) {
+                        return (
+                          <div key={role} className="flex items-start gap-3 text-sm opacity-75">
+                             <div className="mt-1.5 w-2 h-2 rounded-full bg-green-500" />
+                             <div className="flex-1">
+                               <span className="font-semibold text-gray-700">{name}</span>
+                               <span className="text-gray-500"> completed </span>
+                               <span className="font-medium text-green-600">{info.recent_completed} task{info.recent_completed !== 1 ? 's' : ''}</span>
+                             </div>
+                             <span className="text-xs text-gray-400">Recently</span>
+                          </div>
+                        );
+                      }
+                      return null;
+                   })}
+                 </div>
+                 
+                 {lastUpdated && (
+                    <div className="mt-auto pt-2 text-[10px] text-gray-300 text-right">
+                      Updated {new Date(lastUpdated).toLocaleTimeString()}
+                    </div>
+                 )}
               </>
             ) : (
-              <div className="text-gray-500 animate-pulse">Connecting to pipeline...</div>
+              <div className="flex flex-col items-center justify-center py-8 text-gray-400 gap-2">
+                <Loader2 className="animate-spin w-5 h-5 text-cuemarshal-blue" />
+                <span className="text-xs font-medium">Connecting to team feed...</span>
+              </div>
             )}
           </div>
         </div>

@@ -216,6 +216,13 @@ export default function SessionSidebar({
             </div>
           )}
         </div>
+        
+        {/* Footer */}
+        <div className="p-3 border-t border-gray-100 text-center shrink-0">
+            <div className="flex items-center justify-center gap-1.5 text-[10px] text-gray-400 font-medium opacity-80">
+              <span>Powered by CueMarshal</span>
+            </div>
+        </div>
       </>
     );
   }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Sparkles, PlusCircle, Loader2 } from 'lucide-react';
+import { Send, Sparkles, PlusCircle, Loader2, GitCommit, FileText, Terminal, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { sendChatMessage, fetchChatHistory } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
@@ -9,6 +9,14 @@ const WELCOME_MESSAGE = {
   role: 'assistant',
   content: "Hello! I'm Marshal the Lion. How can my team help you orchestrate your pipeline today?",
   agent: 'Marshal',
+};
+
+// Helper to map tool to icon and label
+const getToolDisplay = (toolName) => {
+  if (toolName.includes('git')) return { icon: GitCommit, label: 'Source Control' };
+  if (toolName.includes('file') || toolName.includes('read') || toolName.includes('write')) return { icon: FileText, label: 'File System' };
+  if (toolName.includes('search')) return { icon: Search, label: 'Code Search' };
+  return { icon: Terminal, label: 'System Action' };
 };
 
 export default function ChatView({ currentSessionId = null, onSessionChange, onNewChat }) {
@@ -155,14 +163,30 @@ export default function ChatView({ currentSessionId = null, onSessionChange, onN
               )}
               <div className="leading-relaxed text-[15px] whitespace-pre-wrap">{msg.content}</div>
               {msg.toolCalls && msg.toolCalls.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-gray-200/50">
-                  <div className="text-[11px] text-gray-400 font-mono">
-                    {msg.toolCalls.map((tc, i) => (
-                      <span key={i} className="inline-block mr-2 bg-gray-100 px-1.5 py-0.5 rounded">
-                        {tc.tool}: {tc.result_summary}
-                      </span>
-                    ))}
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                    <Sparkles size={10} />
+                    <span>Actions Taken</span>
                   </div>
+                  {msg.toolCalls.map((tc, i) => {
+                    const { icon: Icon, label } = getToolDisplay(tc.tool);
+                    return (
+                      <div key={i} className="flex items-start gap-2.5 text-xs bg-white/50 p-2.5 rounded-lg border border-gray-100/60 shadow-sm transition-all hover:shadow-md hover:border-gray-200">
+                        <div className="p-1.5 bg-gray-100 rounded-md shrink-0 text-gray-500">
+                          <Icon size={14} />
+                        </div>
+                        <div className="flex-1 min-w-0 py-0.5">
+                           <div className="font-medium text-gray-700 mb-0.5 flex items-center gap-2">
+                             {label}
+                             <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full text-gray-400 font-mono">{tc.tool}</span>
+                           </div>
+                           <div className="text-gray-500 leading-relaxed break-words">
+                             {tc.result_summary}
+                           </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

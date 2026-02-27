@@ -168,11 +168,8 @@ export default function WebLanding() {
           </button>
           <img src="/logo.svg" alt="CueMarshal" className="h-8 w-auto" />
         </div>
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" className="text-gray-300 hover:text-white font-medium hidden md:flex" asChild>
-            <a href="/gitea/">Source Repositories</a>
-          </Button>
-          {token && user ? (
+          <div className="flex items-center gap-4">
+            {token && user ? (
             <>
               <div className="hidden md:flex items-center gap-2 text-gray-300">
                 {user.avatar_url ? (
