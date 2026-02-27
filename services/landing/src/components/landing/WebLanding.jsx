@@ -98,7 +98,7 @@ export default function WebLanding() {
 
   if (!token || !user) {
     return (
-      <div className="min-h-dvh bg-gradient-to-br from-cuemarshal-navy via-cuemarshal-blue to-blue-600 text-white font-inter flex flex-col">
+      <div className="min-h-dvh bg-gradient-to-b from-cuemarshal-navy from-30% via-cuemarshal-navy/80 via-50% to-cuemarshal-blue/90 text-white font-inter flex flex-col">
         <header className="flex items-center justify-between p-4 md:p-6 shrink-0">
           <img src="/logo.svg" alt="CueMarshal" className="h-10 w-auto" />
         </header>
@@ -113,7 +113,7 @@ export default function WebLanding() {
             </div>
 
             <h1 className="font-montserrat font-bold text-3xl sm:text-4xl md:text-6xl mb-4">
-              Welcome to <span className="text-cuemarshal-blue">CueMarshal</span>
+              Welcome to <span className="text-white drop-shadow-[0_0_12px_rgba(0,161,240,0.6)]">CueMarshal</span>
             </h1>
             <p className="text-lg sm:text-xl md:text-2xl text-blue-100 mb-6 sm:mb-8 font-light">
               Your AI-powered development orchestra
@@ -132,7 +132,7 @@ export default function WebLanding() {
             </Button>
 
             <div className="mt-12 sm:mt-16 grid grid-cols-4 md:grid-cols-8 gap-3 sm:gap-4 justify-items-center max-w-sm md:max-w-none mx-auto opacity-60">
-              {['marshal.png', 'ava.png', 'dave.png', 'reese.png', 'tess.png', 'devin.png', 'dot.png', 'linton.png'].map((avatar, i) => (
+              {['ava.png', 'dave.png', 'reese.png', 'tess.png', 'devin.png', 'dot.png', 'linton.png'].map((avatar, i) => (
                 <img key={i} src={`/images/avatars/${avatar}`} alt="Team member" className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 border-white/30" />
               ))}
             </div>
