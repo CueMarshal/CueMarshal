@@ -7,11 +7,10 @@ import { useAuthStore } from '../../stores/auth';
 const WELCOME_MESSAGE = {
   id: 1,
   role: 'assistant',
-  content: "Hello! I'm Marshal the Lion. How can my team help you orchestrate your pipeline today?",
+  content: "Hello! I'm Marshal the Lion. How can my team help you today?",
   agent: 'Marshal',
 };
 
-// Helper to map tool to icon and label
 const getToolDisplay = (toolName) => {
   if (toolName.includes('git')) return { icon: GitCommit, label: 'Source Control' };
   if (toolName.includes('file') || toolName.includes('read') || toolName.includes('write')) return { icon: FileText, label: 'File System' };
@@ -34,7 +33,6 @@ export default function ChatView({ currentSessionId = null, onSessionChange, onN
     scrollToBottom();
   }, [messages]);
 
-  // Load session history when currentSessionId changes
   useEffect(() => {
     if (!currentSessionId) {
       setMessages([{ ...WELCOME_MESSAGE, id: Date.now() }]);
@@ -69,7 +67,6 @@ export default function ChatView({ currentSessionId = null, onSessionChange, onN
     const text = input.trim();
     if (!text || isLoading) return;
 
-    // Add user message immediately
     const userMsg = { id: Date.now(), role: 'user', content: text };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
@@ -78,7 +75,6 @@ export default function ChatView({ currentSessionId = null, onSessionChange, onN
     try {
       const data = await sendChatMessage(text, currentSessionId);
 
-      // Notify parent of session ID for persistence
       if (data.sessionId && onSessionChange) {
         onSessionChange(data.sessionId);
       }
@@ -127,13 +123,13 @@ export default function ChatView({ currentSessionId = null, onSessionChange, onN
   return (
     <div className="flex flex-col h-full w-full bg-white relative">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3 shrink-0">
-        <div className="w-10 h-10 rounded-full bg-cuemarshal-navy flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-cuemarshal-blue ring-offset-2">
+      <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 flex items-center gap-3 shrink-0">
+        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-cuemarshal-navy flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-cuemarshal-blue ring-offset-2">
           <img src="/images/avatars/marshal.png" alt="Marshal" className="w-full h-full object-cover" />
         </div>
-        <div className="flex-1">
-          <h2 className="font-semibold text-cuemarshal-navy text-lg">Marshal</h2>
-          <p className="text-xs text-gray-500 font-medium">
+        <div className="flex-1 min-w-0">
+          <h2 className="font-semibold text-cuemarshal-navy text-base sm:text-lg">Marshal</h2>
+          <p className="text-xs text-gray-500 font-medium truncate">
             {isLoading ? 'Thinking...' : 'Conductor'}
             {!token && ' \u2022 Not authenticated'}
           </p>
@@ -142,16 +138,17 @@ export default function ChatView({ currentSessionId = null, onSessionChange, onN
           onClick={handleNewChat}
           className="p-2 text-gray-400 hover:text-cuemarshal-blue transition-colors rounded-full hover:bg-gray-100"
           title="New conversation"
+          aria-label="New conversation"
         >
           <PlusCircle size={20} />
         </button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] md:max-w-[75%] rounded-2xl p-4 ${
+            <div className={`max-w-[88%] sm:max-w-[80%] lg:max-w-[75%] rounded-2xl px-4 py-3 ${
               msg.role === 'user'
                 ? 'bg-cuemarshal-blue text-white rounded-br-sm'
                 : msg.isError
@@ -159,30 +156,27 @@ export default function ChatView({ currentSessionId = null, onSessionChange, onN
                   : 'bg-cuemarshal-grey text-cuemarshal-charcoal border border-gray-200/60 rounded-bl-sm shadow-sm'
             }`}>
               {msg.role === 'assistant' && (
-                <div className="text-xs font-semibold mb-1 text-gray-500 uppercase tracking-wider">{msg.agent}</div>
+                <div className="text-[11px] font-semibold mb-1 text-gray-500 uppercase tracking-wider">{msg.agent}</div>
               )}
-              <div className="leading-relaxed text-[15px] whitespace-pre-wrap">{msg.content}</div>
+              <div className="leading-relaxed text-sm whitespace-pre-wrap">{msg.content}</div>
               {msg.toolCalls && msg.toolCalls.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  <div className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                <div className="mt-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
                     <Sparkles size={10} />
                     <span>Actions Taken</span>
                   </div>
                   {msg.toolCalls.map((tc, i) => {
                     const { icon: Icon, label } = getToolDisplay(tc.tool);
                     return (
-                      <div key={i} className="flex items-start gap-2.5 text-xs bg-white/50 p-2.5 rounded-lg border border-gray-100/60 shadow-sm transition-all hover:shadow-md hover:border-gray-200">
-                        <div className="p-1.5 bg-gray-100 rounded-md shrink-0 text-gray-500">
-                          <Icon size={14} />
+                      <div key={i} className="flex items-start gap-2 text-xs bg-white/60 p-2 rounded-lg border border-gray-100/60">
+                        <div className="p-1 bg-gray-100 rounded shrink-0 text-gray-500">
+                          <Icon size={12} />
                         </div>
-                        <div className="flex-1 min-w-0 py-0.5">
-                           <div className="font-medium text-gray-700 mb-0.5 flex items-center gap-2">
-                             {label}
-                             <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full text-gray-400 font-mono">{tc.tool}</span>
-                           </div>
-                           <div className="text-gray-500 leading-relaxed break-words">
-                             {tc.result_summary}
-                           </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-700 text-xs">{label}</div>
+                          {tc.result_summary && (
+                            <div className="text-gray-500 text-[11px] leading-relaxed break-words mt-0.5">{tc.result_summary}</div>
+                          )}
                         </div>
                       </div>
                     );
@@ -195,8 +189,8 @@ export default function ChatView({ currentSessionId = null, onSessionChange, onN
 
         {isLoading && (
           <div className="flex justify-start">
-            <div className="max-w-[85%] md:max-w-[75%] rounded-2xl p-4 bg-cuemarshal-grey text-cuemarshal-charcoal border border-gray-200/60 rounded-bl-sm shadow-sm">
-              <div className="text-xs font-semibold mb-1 text-gray-500 uppercase tracking-wider">Marshal</div>
+            <div className="max-w-[88%] sm:max-w-[80%] lg:max-w-[75%] rounded-2xl px-4 py-3 bg-cuemarshal-grey text-cuemarshal-charcoal border border-gray-200/60 rounded-bl-sm shadow-sm">
+              <div className="text-[11px] font-semibold mb-1 text-gray-500 uppercase tracking-wider">Marshal</div>
               <div className="flex items-center gap-2 text-gray-400">
                 <Loader2 size={16} className="animate-spin" />
                 <span className="text-sm">Thinking...</span>
@@ -206,11 +200,11 @@ export default function ChatView({ currentSessionId = null, onSessionChange, onN
         )}
 
         {messages.length === 1 && !isLoading && (
-          <div className="flex flex-wrap gap-2 mt-4 max-w-[85%]">
+          <div className="flex flex-wrap gap-2 mt-2 sm:mt-4 max-w-[88%] sm:max-w-[80%]">
             {suggestions.map((s, i) => (
               <button
                 key={i}
-                className="text-sm bg-gray-50 border border-gray-200 hover:border-cuemarshal-blue hover:text-cuemarshal-blue text-gray-600 px-3 py-1.5 rounded-full transition-colors"
+                className="text-sm bg-gray-50 border border-gray-200 hover:border-cuemarshal-blue hover:text-cuemarshal-blue text-gray-600 px-3 py-1.5 rounded-full transition-colors active:bg-gray-100"
                 onClick={() => setInput(s)}
               >
                 {s}
@@ -222,13 +216,13 @@ export default function ChatView({ currentSessionId = null, onSessionChange, onN
       </div>
 
       {/* Input Area */}
-      <div className="p-4 bg-white border-t border-gray-100 shrink-0">
+      <div className="p-3 sm:p-4 bg-white border-t border-gray-100 shrink-0">
         <form
           onSubmit={handleSend}
-          className="flex items-end gap-2 bg-gray-50 border border-gray-200 rounded-xl p-2 focus-within:border-cuemarshal-blue focus-within:ring-1 focus-within:ring-cuemarshal-blue transition-all"
+          className="flex items-end gap-2 bg-gray-50 border border-gray-200 rounded-xl p-1.5 sm:p-2 focus-within:border-cuemarshal-blue focus-within:ring-1 focus-within:ring-cuemarshal-blue transition-all"
         >
           <textarea
-            className="flex-1 bg-transparent border-none focus:ring-0 resize-none max-h-32 min-h-[44px] py-3 px-2 text-[15px] outline-none placeholder:text-gray-400"
+            className="flex-1 bg-transparent border-none focus:ring-0 resize-none max-h-32 min-h-[44px] py-2.5 sm:py-3 px-2 text-sm outline-none placeholder:text-gray-400"
             placeholder={token ? "Ask the team to build, review, or deploy..." : "Log in to chat with the team..."}
             rows={1}
             value={input}
@@ -244,14 +238,18 @@ export default function ChatView({ currentSessionId = null, onSessionChange, onN
           <Button
             type="submit"
             size="icon"
-            className={`rounded-lg w-10 h-10 mb-0.5 ${input.trim() && !isLoading ? 'bg-cuemarshal-blue hover:bg-blue-600 text-white shadow-md' : 'bg-gray-200 text-gray-400 cursor-not-allowed hidden'}`}
+            className={`rounded-lg w-9 h-9 sm:w-10 sm:h-10 mb-0.5 shrink-0 transition-colors ${
+              input.trim() && !isLoading && token
+                ? 'bg-cuemarshal-blue hover:bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            }`}
             disabled={!input.trim() || isLoading || !token}
           >
-            <Send size={18} />
+            <Send size={16} />
           </Button>
         </form>
-        <div className="text-center mt-3 text-xs text-gray-400 flex justify-center items-center gap-1">
-          <Sparkles size={12} className="text-cuemarshal-blue" />
+        <div className="text-center mt-2 sm:mt-3 text-[11px] sm:text-xs text-gray-400 flex justify-center items-center gap-1">
+          <Sparkles size={11} className="text-cuemarshal-blue" />
           CueMarshal automated intelligence
         </div>
       </div>

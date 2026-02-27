@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bot, Terminal, LogOut, User as UserIcon, Sparkles, Menu } from 'lucide-react';
+import { Bot, Users, LogOut, User as UserIcon, Sparkles, Menu } from 'lucide-react';
 import ChatView from './ChatView';
 import ActivityView from './ActivityView';
 import SessionSidebar from './SessionSidebar';
@@ -9,10 +9,9 @@ import { fetchChatSessions, deleteChatSession, updateChatSession } from '../../s
 import { storage } from '../../services/storage';
 
 export default function WebLanding() {
-  const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'activity' on mobile
+  const [activeTab, setActiveTab] = useState('chat');
   const { token, user, logout, startOAuthFlow } = useAuthStore();
 
-  // Session management state
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -29,7 +28,6 @@ export default function WebLanding() {
     await logout();
   };
 
-  // Load sessions and restore active session on auth
   useEffect(() => {
     if (token && user) {
       loadSessions();
@@ -59,7 +57,6 @@ export default function WebLanding() {
   const handleSessionChange = async (sessionId) => {
     setCurrentSessionId(sessionId);
     await storage.saveCurrentSessionId(sessionId);
-    // Refresh sessions list to update previews
     loadSessions();
   };
 
@@ -99,111 +96,103 @@ export default function WebLanding() {
     }
   };
 
-  // Show login screen if not authenticated
   if (!token || !user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-cuemarshal-navy via-cuemarshal-blue to-blue-600 text-white font-inter flex flex-col">
-        <header className="flex items-center justify-between p-4 md:p-6">
-          <div className="flex items-center gap-3">
-            <img src="/logo.svg" alt="CueMarshal" className="h-10 w-auto" />
-          </div>
+      <div className="min-h-dvh bg-gradient-to-br from-cuemarshal-navy via-cuemarshal-blue to-blue-600 text-white font-inter flex flex-col">
+        <header className="flex items-center justify-between p-4 md:p-6 shrink-0">
+          <img src="/logo.svg" alt="CueMarshal" className="h-10 w-auto" />
         </header>
 
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="max-w-2xl w-full text-center">
             <div className="mb-8 flex justify-center">
               <div className="relative">
-                <img src="/icon.svg" alt="CueMarshal Icon" className="h-32 w-32 animate-pulse" />
-                <div className="absolute -inset-4 bg-white/10 rounded-full blur-2xl"></div>
+                <img src="/icon.svg" alt="CueMarshal" className="h-24 w-24 sm:h-32 sm:w-32 animate-pulse" />
+                <div className="absolute -inset-4 bg-white/10 rounded-full blur-2xl" />
               </div>
             </div>
-            
-            <h1 className="font-montserrat font-bold text-4xl md:text-6xl mb-4">
+
+            <h1 className="font-montserrat font-bold text-3xl sm:text-4xl md:text-6xl mb-4">
               Welcome to <span className="text-cuemarshal-blue">CueMarshal</span>
             </h1>
-            <p className="text-xl md:text-2xl text-blue-100 mb-8 font-light">
+            <p className="text-lg sm:text-xl md:text-2xl text-blue-100 mb-6 sm:mb-8 font-light">
               Your AI-powered development orchestra
             </p>
-            <p className="text-lg text-blue-200 mb-12 max-w-xl mx-auto">
+            <p className="text-base sm:text-lg text-blue-200 mb-10 sm:mb-12 max-w-xl mx-auto">
               Marshal and the team are ready to help you build, review, and deploy with precision and harmony.
             </p>
-            
+
             <Button
               onClick={handleLogin}
               size="lg"
-              className="bg-white text-cuemarshal-navy hover:bg-blue-50 font-bold text-lg px-8 py-6 rounded-xl shadow-2xl transition-all hover:scale-105"
+              className="bg-white text-cuemarshal-navy hover:bg-blue-50 font-bold text-base sm:text-lg px-6 sm:px-8 py-5 sm:py-6 rounded-xl shadow-2xl transition-all hover:scale-105 active:scale-100"
             >
-              <Sparkles className="mr-2" size={24} />
-              Login to Platform
+              <Sparkles className="mr-2" size={22} />
+              Get Started
             </Button>
 
-            <div className="mt-16 grid grid-cols-3 md:grid-cols-7 gap-4 opacity-60">
+            <div className="mt-12 sm:mt-16 grid grid-cols-4 md:grid-cols-8 gap-3 sm:gap-4 justify-items-center max-w-sm md:max-w-none mx-auto opacity-60">
               {['marshal.png', 'ava.png', 'dave.png', 'reese.png', 'tess.png', 'devin.png', 'dot.png', 'linton.png'].map((avatar, i) => (
-                <div key={i} className="flex flex-col items-center">
-                  <img src={`/images/avatars/${avatar}`} alt="Agent" className="w-16 h-16 rounded-full border-2 border-white/30" />
-                </div>
+                <img key={i} src={`/images/avatars/${avatar}`} alt="Team member" className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 border-white/30" />
               ))}
             </div>
           </div>
         </div>
 
-        <footer className="p-6 text-center text-blue-200 text-sm">
-          <p>© 2026 CueMarshal. AI-powered development automation.</p>
+        <footer className="p-4 sm:p-6 text-center text-blue-200 text-xs sm:text-sm shrink-0">
+          <p>&copy; 2026 CueMarshal. AI-powered development automation.</p>
         </footer>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-cuemarshal-white text-cuemarshal-charcoal font-inter flex flex-col overflow-hidden">
-      {/* Navbar Minimal */}
-      <header className="flex items-center justify-between p-4 border-b border-gray-100 bg-cuemarshal-navy text-white">
-        <div className="flex items-center gap-3">
-          {/* Mobile sidebar toggle */}
+    <div className="h-dvh bg-cuemarshal-white text-cuemarshal-charcoal font-inter flex flex-col overflow-hidden">
+      <header className="flex items-center justify-between px-3 sm:px-4 py-3 bg-cuemarshal-navy text-white shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="md:hidden p-2 text-gray-300 hover:text-white rounded transition-colors"
+            className="md:hidden p-2 -ml-1 text-gray-300 hover:text-white rounded-lg transition-colors"
+            aria-label="Open chat history"
           >
             <Menu size={20} />
           </button>
-          <img src="/logo.svg" alt="CueMarshal" className="h-8 w-auto" />
+          <img src="/logo.svg" alt="CueMarshal" className="h-7 sm:h-8 w-auto" />
         </div>
-          <div className="flex items-center gap-4">
-            {token && user ? (
+        <div className="flex items-center gap-2 sm:gap-3">
+          {token && user ? (
             <>
-              <div className="hidden md:flex items-center gap-2 text-gray-300">
+              <div className="hidden sm:flex items-center gap-2 text-gray-300">
                 {user.avatar_url ? (
-                  <img src={user.avatar_url} alt={user.username} className="w-8 h-8 rounded-full" />
+                  <img src={user.avatar_url} alt={user.username} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full" />
                 ) : (
-                  <UserIcon size={20} />
+                  <UserIcon size={18} />
                 )}
-                <span className="text-sm">{user.username}</span>
+                <span className="text-sm font-medium">{user.username}</span>
               </div>
-              <Button 
-                variant="ghost" 
-                className="text-gray-300 hover:text-white font-medium"
+              <Button
+                variant="ghost"
+                className="text-gray-300 hover:text-white font-medium h-9"
                 onClick={handleLogout}
               >
-                <LogOut size={16} className="mr-2" />
-                Logout
+                <LogOut size={16} className="sm:mr-1.5" />
+                <span className="hidden sm:inline">Logout</span>
               </Button>
             </>
           ) : (
-            <Button 
+            <Button
               className="bg-cuemarshal-blue hover:bg-blue-600 text-white font-semibold"
               onClick={handleLogin}
             >
-              Login to Platform
+              Login
             </Button>
           )}
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <div className="flex flex-1 flex-col md:flex-row overflow-hidden relative">
-
-        {/* Desktop Session Sidebar */}
-        <div className="hidden md:flex w-[280px] shrink-0">
+      <div className="flex flex-1 flex-col lg:flex-row overflow-hidden">
+        {/* Desktop Sidebar */}
+        <div className="hidden md:flex w-[240px] xl:w-[280px] shrink-0 border-r border-gray-200">
           <SessionSidebar
             sessions={sessions}
             currentSessionId={currentSessionId}
@@ -231,24 +220,32 @@ export default function WebLanding() {
           isMobileOverlay
         />
 
-        {/* Mobile Toggle */}
-        <div className="md:hidden flex p-2 bg-gray-50 border-b border-gray-200 gap-2 shrink-0">
+        {/* Tab Bar -- visible below lg breakpoint */}
+        <div className="lg:hidden flex p-1.5 sm:p-2 bg-gray-50 border-b border-gray-200 gap-1.5 sm:gap-2 shrink-0">
           <button
             onClick={() => setActiveTab('chat')}
-            className={`flex-1 py-2 px-4 rounded-md font-medium text-sm transition-colors flex justify-center items-center gap-2 ${activeTab === 'chat' ? 'bg-white shadow-sm text-cuemarshal-navy border border-gray-200' : 'text-gray-500'}`}
+            className={`flex-1 py-2 px-3 rounded-lg font-medium text-sm transition-colors flex justify-center items-center gap-2 ${
+              activeTab === 'chat'
+                ? 'bg-white shadow-sm text-cuemarshal-navy border border-gray-200'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
           >
             <Bot size={16} /> Chat
           </button>
           <button
             onClick={() => setActiveTab('activity')}
-            className={`flex-1 py-2 px-4 rounded-md font-medium text-sm transition-colors flex justify-center items-center gap-2 ${activeTab === 'activity' ? 'bg-white shadow-sm text-cuemarshal-navy border border-gray-200' : 'text-gray-500'}`}
+            className={`flex-1 py-2 px-3 rounded-lg font-medium text-sm transition-colors flex justify-center items-center gap-2 ${
+              activeTab === 'activity'
+                ? 'bg-white shadow-sm text-cuemarshal-navy border border-gray-200'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
           >
-            <Terminal size={16} /> Activity
+            <Users size={16} /> Team
           </button>
         </div>
 
-        {/* Left Panel: Chat (Default) */}
-        <div className={`flex-1 flex flex-col bg-white border-r border-gray-100 md:flex h-full ${activeTab === 'activity' ? 'hidden md:flex' : 'flex'}`}>
+        {/* Chat Panel -- primary, takes remaining space */}
+        <div className={`flex-1 flex flex-col bg-white min-w-0 ${activeTab === 'activity' ? 'hidden lg:flex' : 'flex'}`}>
           <ChatView
             currentSessionId={currentSessionId}
             onSessionChange={handleSessionChange}
@@ -256,11 +253,10 @@ export default function WebLanding() {
           />
         </div>
 
-        {/* Right Panel: Activity (Agents) */}
-        <div className={`flex-1 flex flex-col bg-cuemarshal-grey md:flex h-full ${activeTab === 'chat' ? 'hidden md:flex' : 'flex'} border-l border-gray-200 relative`}>
+        {/* Activity Panel -- fixed width on desktop, full width on mobile/tablet */}
+        <div className={`flex-1 lg:flex-none lg:w-[380px] xl:w-[420px] flex flex-col bg-cuemarshal-grey lg:border-l lg:border-gray-200 ${activeTab === 'chat' ? 'hidden lg:flex' : 'flex'}`}>
           <ActivityView />
         </div>
-
       </div>
     </div>
   );

@@ -47,7 +47,6 @@ export default function SessionSidebar({
     return title.includes(q) || preview.includes(q);
   });
 
-  // Sort: favorites first, then by updatedAt desc
   const sorted = [...filtered].sort((a, b) => {
     if (a.is_favorite && !b.is_favorite) return -1;
     if (!a.is_favorite && b.is_favorite) return 1;
@@ -61,7 +60,6 @@ export default function SessionSidebar({
       setConfirmDeleteId(null);
     } else {
       setConfirmDeleteId(sessionId);
-      // Auto-clear confirm after 3 seconds
       setTimeout(() => setConfirmDeleteId(null), 3000);
     }
   };
@@ -71,24 +69,20 @@ export default function SessionSidebar({
     onToggleFavorite(sessionId, isFavorite);
   };
 
-  // Mobile overlay mode
   if (isMobileOverlay) {
     if (!isOpen) return null;
     return (
       <div className="fixed inset-0 z-50 md:hidden">
-        {/* Backdrop */}
-        <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-        {/* Panel */}
-        <div className="absolute left-0 top-0 bottom-0 w-[280px] bg-white flex flex-col shadow-2xl animate-in slide-in-from-left">
+        <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={onClose} />
+        <div className="absolute left-0 top-0 bottom-0 w-[min(280px,85vw)] bg-white flex flex-col shadow-2xl animate-slide-in-left">
           {renderContent(true)}
         </div>
       </div>
     );
   }
 
-  // Desktop: normal sidebar
   return (
-    <div className="flex flex-col h-full bg-white border-r border-gray-200 w-full">
+    <div className="flex flex-col h-full bg-white w-full">
       {renderContent(false)}
     </div>
   );
@@ -102,7 +96,8 @@ export default function SessionSidebar({
           {showCloseButton && (
             <button
               onClick={onClose}
-              className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+              className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"
+              aria-label="Close sidebar"
             >
               <X size={18} />
             </button>
@@ -113,7 +108,7 @@ export default function SessionSidebar({
         <div className="px-3 py-2 shrink-0">
           <button
             onClick={onNewChat}
-            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-cuemarshal-blue text-white text-sm font-medium hover:bg-blue-600 transition-colors shadow-sm"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-cuemarshal-blue text-white text-sm font-medium hover:bg-blue-600 active:bg-blue-700 transition-colors shadow-sm"
           >
             <Plus size={16} />
             New Chat
@@ -123,7 +118,7 @@ export default function SessionSidebar({
         {/* Search */}
         <div className="px-3 pb-2 shrink-0">
           <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <input
               type="text"
               placeholder="Search conversations..."
@@ -135,14 +130,14 @@ export default function SessionSidebar({
         </div>
 
         {/* Sessions List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto hide-scrollbar">
           {isLoading ? (
             <div className="flex items-center justify-center py-8 text-gray-400">
               <Loader2 size={20} className="animate-spin" />
             </div>
           ) : sorted.length === 0 ? (
             <div className="px-4 py-8 text-center">
-              <MessageSquare size={32} className="mx-auto text-gray-300 mb-2" />
+              <MessageSquare size={28} className="mx-auto text-gray-300 mb-2" />
               <p className="text-xs text-gray-400">
                 {searchQuery ? 'No matching conversations' : 'No conversations yet.'}
               </p>
@@ -159,13 +154,13 @@ export default function SessionSidebar({
                   <div
                     key={session.id}
                     onClick={() => onSelectSession(session.id)}
-                    className={`group px-3 py-2.5 mx-2 mb-0.5 rounded-lg cursor-pointer transition-all ${
+                    className={`group relative px-3 py-2.5 mx-2 mb-0.5 rounded-lg cursor-pointer transition-all ${
                       isActive
                         ? 'bg-cuemarshal-blue/10 border-l-2 border-cuemarshal-blue'
                         : 'hover:bg-gray-50 border-l-2 border-transparent'
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-1">
+                    <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm font-medium truncate ${isActive ? 'text-cuemarshal-navy' : 'text-gray-700'}`}>
                           {getDisplayTitle(session)}
@@ -173,41 +168,40 @@ export default function SessionSidebar({
                         {session.preview && (
                           <p className="text-xs text-gray-400 truncate mt-0.5">{session.preview}</p>
                         )}
-                        <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-400">
+                        <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-400">
                           <span>{session.message_count || 0} messages</span>
-                          <span>•</span>
+                          <span>&middot;</span>
                           <span>{formatRelativeTime(session.updated_at)}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={(e) => handleFavorite(e, session.id, session.is_favorite)}
-                          className="p-1 rounded hover:bg-gray-200 transition-colors"
+                          className="p-1.5 rounded-md hover:bg-gray-200 transition-colors"
                           title={session.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
                         >
                           <Star
-                            size={13}
+                            size={14}
                             className={session.is_favorite ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'}
                           />
                         </button>
                         <button
                           onClick={(e) => handleDelete(e, session.id)}
-                          className={`p-1 rounded transition-colors ${
+                          className={`p-1.5 rounded-md transition-colors ${
                             isConfirmingDelete
                               ? 'bg-red-100 text-red-600'
                               : 'hover:bg-red-50 text-gray-400 hover:text-red-500'
                           }`}
                           title={isConfirmingDelete ? 'Click again to confirm' : 'Delete conversation'}
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
-                    {/* Always show star for favorited items */}
                     {session.is_favorite && (
                       <Star
                         size={11}
-                        className="fill-yellow-400 text-yellow-400 absolute top-2 right-2 group-hover:hidden"
+                        className="fill-yellow-400 text-yellow-400 absolute top-2.5 right-2.5 group-hover:hidden pointer-events-none"
                       />
                     )}
                   </div>
@@ -216,12 +210,12 @@ export default function SessionSidebar({
             </div>
           )}
         </div>
-        
+
         {/* Footer */}
         <div className="p-3 border-t border-gray-100 text-center shrink-0">
-            <div className="flex items-center justify-center gap-1.5 text-[10px] text-gray-400 font-medium opacity-80">
-              <span>Powered by CueMarshal</span>
-            </div>
+          <div className="text-[11px] text-gray-400 font-medium">
+            Powered by CueMarshal
+          </div>
         </div>
       </>
     );
