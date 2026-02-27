@@ -19,6 +19,22 @@ spec:
     spec:
       restartPolicy: OnFailure
       serviceAccountName: {{ include "cuemarshal.fullname" . }}-init-gitea
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - "{{ include "cuemarshal.name" . }}"
+                - key: statefulset.kubernetes.io/pod-name
+                  operator: In
+                  values:
+                  - "{{ include "cuemarshal.fullname" . }}-gitea-0"
+              topologyKey: kubernetes.io/hostname
       initContainers:
       - name: wait-for-gitea
         image: curlimages/curl:latest

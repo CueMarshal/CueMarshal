@@ -457,7 +457,20 @@ ingress-nginx:
 
 ### OAuth2 / Authentication Issues
 
-- **Login returns 503 or "OAuth2 client ID is not available"**: The `oauth-config` ConfigMap is empty. The init-gitea Helm hook may not have completed successfully. Check and fix:
+- **Login returns 503 or "OAuth2 client ID is not available"**: The `oauth-config` ConfigMap is empty because the init-gitea Helm hook may not have completed successfully. This typically occurs due to **PersistentVolume node affinity mismatches** in local-path provisioner deployments. 
+  
+  **Quick Fix**: Ensure the init-gitea job can access both required PVCs on the same node by deleting them and redeploying:
+  ```bash
+  # Delete PVCs to force recreation on the same node
+  kubectl delete pvc -n cuemarshal-local cuemarshal-tokens data-cuemarshal-gitea-0
+  
+  # Redeploy - pod affinity rules will guide PVC creation to the same node
+  bash scripts/deploy-to-cluster.sh
+  ```
+  
+  For detailed analysis and root cause explanation, see [RESOLUTION-oauth2-initialization-issue.md](../operations/RESOLUTION-oauth2-initialization-issue.md).
+  
+  **Alternative Workaround** (if quick fix doesn't work): Manually patch the ConfigMap:
   ```bash
   # Check if ConfigMap has a value
   kubectl get configmap -n cuemarshal-ws-dev dev-workspace-cuemarshal-oauth-config \
@@ -477,7 +490,7 @@ ingress-nginx:
   kubectl delete pod -n cuemarshal-ws-dev -l app.kubernetes.io/name=cuemarshal,component=conductor
   ```
 
-- **`/api/config` returns `{"oauth2ClientId":null}`**: Same root cause as above -- the conductor cannot read the client ID from `/tokens/oauth2_client_id`. Follow the manual patch steps.
+- **`/api/config` returns `{"oauth2ClientId":null}`**: Same root cause as above -- the conductor cannot read the client ID from `/tokens/oauth2_client_id`. Follow the quick fix or workaround steps above.
 
 - **Gitea login page appears but OAuth callback fails**: Check that the OAuth2 app in Gitea has the correct redirect URI (`http://demo.local/oauth/callback`). Verify with:
   ```bash
