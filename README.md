@@ -1,149 +1,172 @@
-# CueMarshal
+# CueMarshal – AI-Powered DevOps for Software Teams
 
-A self-hosted, Git-centric AI software development platform. Gitea is the single source of truth. A Conductor orchestrates all work. Specialized agents powered by OpenCode execute SDLC tasks. LiteLLM provides intelligent LLM routing with automatic fallback. MCP servers unify tool access for both automated agents and human users.
+**Stop context-switching. Your entire workflow lives in Git.**
 
-## Core Principles
+CueMarshal is self-hosted AI DevOps — like GitHub Actions with Claude built in. Create an issue. Specialized AI agents handle the busy work. You review, merge, ship.
 
-1. **Gitea is the single source of truth.** Every project, task, code change, and status update lives in Gitea as repositories, issues, pull requests, and labels.
-2. **Git Flow execution model.** All work follows a strict branch-based lifecycle: issue created, branch opened, code written by agent, PR submitted, review by agent, merge by Conductor.
-3. **Conductor + Agents architecture.** The Conductor decomposes tasks and assigns them to specialized SDLC agents (architect, developer, reviewer, tester, devops, docs). Agents execute via OpenCode in Gitea runners.
-4. **MCP as the universal tool layer.** Three MCP servers (Gitea, Conductor, System) provide structured tool interfaces used by both automated agents in runners (stdio) and the mobile chat handler (HTTP/SSE).
-5. **Automated model selection.** The Conductor analyzes task complexity and selects the optimal LLM tier. LiteLLM handles provider routing, fallback on rate limits, and cost tracking.
-6. **Self-improvement.** When runners are idle, the system scans its own codebase for improvement opportunities and executes them through the standard Git Flow pipeline.
+- **Architect** — designs the solution and opens a spec PR
+- **Developer** — writes the code on a feature branch
+- **Reviewer** — checks for bugs, security issues, and code quality
+- **Tester** — runs test suites and verifies functionality
+- **DevOps** — handles infrastructure and deployment tasks
+- **Docs** — keeps documentation up to date automatically
 
-## Architecture
+Every step lives in Gitea as issues, branches, pull requests, and labels. Full audit trail. Full human control.
 
-```
-User (Mobile App / Gitea UI)
-         |
-    Conductor (TypeScript) ── Redis/BullMQ
-         |          |
-    MCP Servers    LLM Gateway (LiteLLM)
-    ├── Gitea MCP      ├── Anthropic
-    ├── Conductor MCP   ├── OpenAI
-    └── System MCP      ├── Ollama (local)
-         |              └── Other providers
-    Gitea Server ── PostgreSQL
-         |
-    Runners (Gitea Act Runner + OpenCode + MCP)
-    ├── Developer Agent
-    ├── Reviewer Agent
-    ├── Tester Agent
-    ├── Architect Agent
-    └── DevOps Agent
-```
+> ⚠️ **Early stage.** Core workflow is functional. Self-improvement engine works but needs more testing. Mobile app and Kubernetes Helm charts are in progress.
 
-See [docs/architecture/overview.md](docs/architecture/overview.md) for the full architecture with diagrams.
+---
 
-## Deployment Options
+## Why CueMarshal?
 
-### Self-Hosted (Docker Compose)
-Run CueMarshal on your own infrastructure with full control. Perfect for teams that want data sovereignty and customization.
+| Traditional CI/CD | CueMarshal |
+|---|---|
+| Separate tools for tasks, reviews, docs | Everything lives in Git |
+| Fixed pipelines, hard to customize | Flexible agents you configure |
+| "Why did it fail?" is unclear | Full reasoning trail in PRs |
+| Expensive cloud bills | Run on your hardware, pay only for model calls |
+| Vendor lock-in | Open source, fully self-hosted |
 
-```bash
-# Interactive installation wizard
-./install.sh
-```
+**Use Cases:**
+- **Ship faster** — Cut code review time from hours to minutes
+- **Better quality** — AI reviewers catch security issues humans miss
+- **Data sovereignty** — Your code never leaves your servers
+- **Cost control** — ~$0.50/issue in API costs vs $100+/month in cloud CI
 
-See [Implementation Status](docs/project/status.md) for setup details.
-
-### Hosted (cuemarshal.dev)
-Fully managed cloud offering on Azure Kubernetes Service. Zero infrastructure management, automatic updates, built-in monitoring.
-
-Sign up at: https://app.cuemarshal.dev
-
-The hosted platform is managed by a separate repository (**cuemarshal-cloud**) at `~/source/repos/cuemarshal-cloud`.
-
-## Repository Structure
-
-```
-cuemarshal/
-├── services/           # All custom-built services
-│   ├── conductor/      # Orchestrator service (TypeScript/Node.js)
-│   ├── gateway/        # LLM Gateway (LiteLLM + custom callbacks)
-│   ├── mcp-servers/    # MCP servers: gitea-mcp, conductor-mcp, system-mcp, vector-mcp, sonar-mcp
-│   ├── runner/         # Custom Gitea Act Runner Dockerfile
-│   └── agents/         # OpenCode agent profiles (per SDLC role)
-├── mobile/             # React Native Expo mobile app
-├── infrastructure/     # Gitea, PostgreSQL, Redis, Nginx, SonarQube, Helm configs
-│   └── helm/           # Kubernetes Helm charts
-├── monitoring/         # Observability stack
-│   ├── prometheus/     # Metrics collection
-│   ├── grafana/        # Dashboards and visualization
-│   ├── loki/           # Log aggregation
-│   └── promtail/       # Log shipping
-├── workflows/          # Gitea Actions workflow templates
-├── scripts/            # Setup and utility scripts
-└── docs/               # Full documentation suite
-```
-
-## Services
-
-| Service | Port (Host:Container) | Description |
-|---------|----------------------|-------------|
-| Gitea | 3300:3000 / 2223:22 | Git server, issues, PRs, workflows, webhooks |
-| PostgreSQL | 5432 (internal) | Shared database (Gitea + Conductor + LiteLLM) |
-| Redis | 6379 (internal) | Task queue (BullMQ), cache, LiteLLM cooldowns |
-| Conductor | 4000 (internal) | Orchestrator, webhook handler, mobile API, auto-recovery |
-| LLM Gateway | 4100 (internal) | LiteLLM proxy with 3-provider fallback (Groq→Gemini→Azure AI) |
-| Gitea MCP | 4200 (internal) | MCP server for Gitea operations (stdio in runners) |
-| Conductor MCP | 4201 (internal) | MCP server for task/agent coordination (stdio in runners) |
-| System MCP | 4202 (internal) | MCP server for costs, runners, health (stdio in runners) |
-| Nginx | 8180:80 | Reverse proxy for Conductor and Gitea |
-
-**Note**: Non-conflicting ports are used because this host also runs a CrewAI deployment on default ports.
+---
 
 ## Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/cuemarshal/cuemarshal.git
+cd cuemarshal
+
+# One-command setup (handles secrets, deps, and health checks)
+./quick-start.sh
+```
+
+Open **http://localhost:3300** — Gitea is ready.
+
+> Need full control? See the [detailed setup guide](docs/operations/deployment.md).
 
 ### Prerequisites
 
 - Docker and Docker Compose v2+
-- At least 8 GB RAM (16 GB recommended)
-- **At least one LLM API key**:
-  - **Groq** (free, fast, 30K TPM / 500K daily) - Primary
-  - **Google Gemini** (free) - Fallback
-  - **Azure AI** (paid, S0 tier) - Second fallback
+- 8 GB RAM minimum (16 GB recommended)
+- At least one LLM API key:
+  - [Groq](https://console.groq.com) (free, fast — primary)
+  - [Google Gemini](https://aistudio.google.com) (free — fallback)
+  - [Azure AI](https://azure.microsoft.com/en-us/products/ai-services) (paid — second fallback)
 
-### One-Command Setup
+---
 
-```bash
-# 1. Clone the repository
-git clone https://github.com/achingono/cuemarshal.git
-cd cuemarshal
+## What's Implemented
 
-# 2. Copy and configure environment
-cp .env.example .env
-# Edit .env with your API keys:
-# - GROQ_API_KEY, GEMINI_API_KEY, AZURE_AI_API_KEY
-# - Generate secrets: openssl rand -hex 32
+- ✅ Conductor orchestrator (task decomposition + agent routing)
+- ✅ 6 specialized AI agents (architect, developer, reviewer, tester, devops, docs)
+- ✅ Git Flow execution (issue → branch → PR → review → merge)
+- ✅ LiteLLM gateway with 3-provider fallback (Groq → Gemini → Azure)
+- ✅ MCP servers for tool access (Gitea, Conductor, System)
+- ✅ Self-improvement loop (system scans and improves its own codebase)
+- ✅ Docker Compose deployment (11 services, one command)
+- ⏳ Mobile app (React Native, in progress)
+- ⏳ Kubernetes Helm charts (in progress)
+- ⏳ Multi-repo support (planned)
 
-# 3. Start everything
-docker compose up -d
+---
 
-# 4. Wait for init-gitea to complete (~60 seconds)
-docker logs cuemarshal-init-gitea -f
+## How It Works
 
-# ✓ All services start automatically with proper dependencies
-# ✓ init-gitea creates admin user, bot user, org, repo, webhook, labels
-# ✓ Runners auto-register via shared token volume
-# ✓ Conductor runs database migrations on startup
+```
+User creates issue in Gitea
+         │
+    Conductor receives webhook
+         │
+    Conductor decomposes task → assigns to agents
+         │
+    ┌────┴──────────────────────────────────┐
+    │  Architect  →  spec PR                │
+    │  Developer  →  implementation PR      │
+    │  Reviewer   →  review comments + fix  │
+    │  Tester     →  test results           │
+    │  Docs       →  documentation PR       │
+    └────────────────────────────────────────┘
+         │
+    Human reviews + merges
+         │
+    Done. Full audit trail in Git.
 ```
 
-### Verify
+### Architecture
 
-```bash
-# Check all 11 services are healthy
-docker compose ps
-
-# Access services:
-# - Gitea UI: http://localhost:3300
-# - Conductor health: curl http://localhost:8180/conductor/health  
-# - Nginx proxy: http://localhost:8180
+```
+User (Mobile App / Gitea UI)
+         │
+    Conductor (TypeScript) ── Redis/BullMQ
+         │          │
+    MCP Servers    LLM Gateway (LiteLLM)
+    ├── Gitea MCP      ├── Groq
+    ├── Conductor MCP  ├── Google Gemini
+    └── System MCP     └── Azure AI
+         │
+    Gitea Server ── PostgreSQL
+         │
+    Runners (Gitea Act Runner + OpenCode)
+    ├── Developer Agent
+    ├── Reviewer Agent
+    ├── Tester Agent
+    ├── Architect Agent
+    ├── DevOps Agent
+    └── Docs Agent
 ```
 
-Login to Gitea with credentials from `.env`:
-- Username: `cuemarshal-admin`
-- Password: `GITEA_ADMIN_PASSWORD`
+See [Architecture Overview](docs/architecture/overview.md) for full diagrams and data flows.
+
+---
+
+## Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Gitea | 3300 | Git server, issues, PRs, workflows, webhooks |
+| Conductor | 4000 (internal) | Orchestrator, webhook handler, mobile API |
+| LLM Gateway | 4100 (internal) | LiteLLM proxy with 3-provider fallback |
+| Gitea MCP | 4200 (internal) | MCP server for Gitea operations |
+| Conductor MCP | 4201 (internal) | MCP server for task/agent coordination |
+| System MCP | 4202 (internal) | MCP server for costs, runners, health |
+| PostgreSQL | 5432 (internal) | Shared database |
+| Redis | 6379 (internal) | Task queue (BullMQ) and cache |
+| Nginx | 8180 | Reverse proxy |
+
+---
+
+## Who Should Use CueMarshal?
+
+- **Software teams** wanting AI-assisted code review and task automation
+- **Engineering leaders** concerned about vendor lock-in or cloud costs
+- **Organizations** with data residency requirements (your code stays on your servers)
+- **Developers** already using Gitea who want AI-powered workflows
+- **Builders** who want to experiment with AI agent orchestration
+
+---
+
+## Technology Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Orchestration | TypeScript, Node.js, Express, BullMQ, Drizzle ORM |
+| LLM Gateway | LiteLLM (Python), custom callbacks |
+| MCP Servers | TypeScript, @modelcontextprotocol/sdk |
+| AI Engine | OpenCode (Go), headless/CLI mode |
+| Git Platform | Gitea, Gitea Act Runner |
+| Mobile | React Native, Expo, TypeScript |
+| Database | PostgreSQL |
+| Cache/Queue | Redis |
+| Proxy | Nginx |
+| Containers | Docker, Docker Compose |
+
+---
 
 ## Documentation
 
@@ -162,45 +185,29 @@ Login to Gitea with credentials from `.env`:
 | [Security](docs/operations/security.md) | Security model and access control |
 | [Deployment](docs/operations/deployment.md) | Deployment and infrastructure guide |
 | [API Reference](docs/api/api-reference.md) | Conductor REST and WebSocket API |
-| [Webhooks](docs/api/webhooks.md) | Gitea webhook event matrix |
 
-## Technology Stack
-
-- **Orchestration**: TypeScript, Node.js, Express, BullMQ, Drizzle ORM
-- **LLM Gateway**: LiteLLM (Python), custom callbacks
-- **MCP Servers**: TypeScript, @modelcontextprotocol/sdk
-- **AI Engine**: OpenCode (Go), headless/CLI mode
-- **Git Platform**: Gitea, Gitea Act Runner
-- **Mobile**: React Native, Expo, TypeScript
-- **Database**: PostgreSQL
-- **Cache/Queue**: Redis
-- **Proxy**: Nginx
-- **Containers**: Docker, Docker Compose
+---
 
 ## Contributing
 
-CueMarshal uses its own platform to manage contributions — improvements are
-proposed and executed through Gitea issues and pull requests, often by the
-AI agents themselves.
+CueMarshal uses its own platform to manage contributions — improvements flow through Gitea issues and PRs, often executed by the AI agents themselves.
 
 To contribute:
 
-1. **Fork** the repository and create a feature branch from `main`.
-2. **Open an issue** describing what you plan to change before submitting a PR.
-3. **Follow the Git Flow** used by the platform: one logical change per branch,
-   one PR per issue.
-4. **Run the test suites** before opening a PR:
+1. **Fork** the repository and create a feature branch from `main`
+2. **Open an issue** describing what you plan to change before submitting a PR
+3. **Follow Git Flow**: one logical change per branch, one PR per issue
+4. **Run tests** before opening a PR:
    ```bash
-   # MCP servers
    cd services/mcp-servers && npm test
-   # Conductor
    cd services/conductor && npm test
    ```
-5. **Ensure Docker Compose starts cleanly** with `bash install.sh`.
+5. **Ensure Docker Compose starts cleanly** with `./quick-start.sh`
 
-All pull requests are reviewed (and may be reviewed *by*) the CueMarshal
-reviewer agent. Humans have final merge authority.
+PRs are reviewed by the CueMarshal reviewer agent. Humans have final merge authority.
+
+---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE) for details.
