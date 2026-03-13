@@ -58,7 +58,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         type: "object" as const,
         properties: tool.parameters.shape,
         required: Object.keys(tool.parameters.shape).filter(
-          (key) => !(tool.parameters.shape as Record<string, { isOptional: () => boolean }>)[key].isOptional()
+          (key) => !isZodOptional(tool.parameters.shape[key as keyof typeof tool.parameters.shape])
         ),
       },
     })),

@@ -15,21 +15,22 @@ export const SessionTools = {
       limit: z.number().optional().describe("Max sessions to return (default: 10)"),
     }),
     handler: async (args: { task_id: string; agent_role?: string; limit?: number }) => {
-      const params = new URLSearchParams();
-      params.append("task_id", args.task_id);
-      if (args.agent_role) params.append("agent_role", args.agent_role);
-      params.append("limit", String(args.limit || 10));
+      try {
+        const params = new URLSearchParams();
+        params.append("task_id", args.task_id);
+        if (args.agent_role) params.append("agent_role", args.agent_role);
+        params.append("limit", String(args.limit || 10));
 
-      const result = await conductorRequest("GET", `/sessions?${params}`);
+        const result = await conductorRequest("GET", `/sessions?${params}`);
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: (error as Error).message }, null, 2) }],
+        };
+      }
     },
   },
 
@@ -51,21 +52,22 @@ export const SessionTools = {
       tool_calls: Array<{ tool: string; arguments: Record<string, unknown>; result: string }>;
       execution_log?: string;
     }) => {
-      const result = await conductorRequest("POST", "/sessions", {
-        task_id: args.task_id,
-        agent_role: args.agent_role,
-        tool_calls: args.tool_calls,
-        execution_log: args.execution_log,
-      });
+      try {
+        const result = await conductorRequest("POST", "/sessions", {
+          task_id: args.task_id,
+          agent_role: args.agent_role,
+          tool_calls: args.tool_calls,
+          execution_log: args.execution_log,
+        });
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: (error as Error).message }, null, 2) }],
+        };
+      }
     },
   },
 };

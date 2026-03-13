@@ -7,6 +7,28 @@ import { conductorRequest } from "../auth.js";
 import { readFileSync } from "fs";
 import { join } from "path";
 
+interface ConductorProjectPlanResult {
+  plan: unknown;
+}
+
+interface ConductorProject {
+  name: string;
+  status: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
+interface ConductorProjectListResult {
+  projects: ConductorProject[];
+  total: number;
+}
+
+interface ConductorProjectExecuteResult {
+  milestones_created: number;
+  issues_created: number;
+  [key: string]: unknown;
+}
+
 export const ProjectTools = {
   project_create: {
     description: "Create a new project (repository + plan). This creates a Gitea repository, initializes workflows, and generates a project plan for user approval.",
@@ -33,7 +55,7 @@ export const ProjectTools = {
       const workflowFiles = ["task-execute.yml", "code-review.yml", "run-tests.yml"];
       for (const workflowFile of workflowFiles) {
         try {
-          // Read workflow template
+          // Read workflow template from the container path (mounted at /app/workflows in Docker/K8s)
           const workflowContent = readFileSync(join("/app/workflows", workflowFile), "utf-8");
           
           // Create workflow in new repo via Gitea MCP
@@ -56,7 +78,7 @@ export const ProjectTools = {
       }
 
       // Step 3: Generate project plan
-      const planResult: any = await conductorRequest("POST", "/api/internal/projects/plan", {
+      const planResult = await conductorRequest("POST", "/projects/plan", {
         name: args.name,
         description: args.description,
         goals: args.goals || [],
@@ -73,7 +95,7 @@ export const ProjectTools = {
                 repo: `cuemarshal/${args.name}`,
                 description: args.description,
               },
-              plan: planResult.plan,
+              plan: (planResult as ConductorProjectPlanResult).plan,
               message: "Project created successfully. Review the plan and use project_approve to proceed with execution.",
             }, null, 2),
           },
@@ -89,7 +111,7 @@ export const ProjectTools = {
       modifications: z.string().optional().describe("Optional modifications to the plan in natural language"),
     }),
     handler: async (args: { name: string; modifications?: string }) => {
-      const result: any = await conductorRequest("POST", `/api/internal/projects/${args.name}/execute`, {
+      const result = await conductorRequest("POST", `/projects/${args.name}/execute`, {
         modifications: args.modifications,
       });
 
@@ -100,7 +122,7 @@ export const ProjectTools = {
             text: JSON.stringify({
               success: true,
               execution: result,
-              message: `Project plan approved and executed. Created ${result.milestones_created} milestones and ${result.issues_created} issues. Work will begin automatically.`,
+              message: `Project plan approved and executed. Created ${(result as ConductorProjectExecuteResult).milestones_created} milestones and ${(result as ConductorProjectExecuteResult).issues_created} issues. Work will begin automatically.`,
             }, null, 2),
           },
         ],
@@ -118,7 +140,7 @@ export const ProjectTools = {
       if (args.status) params.append("status", args.status);
       const query = params.toString();
 
-      const result: any = await conductorRequest("GET", `/projects${query ? `?${query}` : ""}`);
+      const result = await conductorRequest("GET", `/projects${query ? `?${query}` : ""}`) as ConductorProjectListResult;
 
       return {
         content: [
@@ -140,8 +162,8 @@ export const ProjectTools = {
       name: z.string().describe("Project name"),
     }),
     handler: async (args: { name: string }) => {
-      const result: any = await conductorRequest("GET", `/projects`);
-      const project = result.projects?.find((p: any) => p.name === args.name);
+      const result = await conductorRequest("GET", `/projects`) as ConductorProjectListResult;
+      const project = result.projects?.find((p) => p.name === args.name);
 
       if (!project) {
         return {

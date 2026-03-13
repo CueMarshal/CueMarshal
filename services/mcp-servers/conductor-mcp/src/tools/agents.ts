@@ -13,20 +13,21 @@ export const AgentTools = {
       role: z.string().optional().describe("Agent role to query"),
     }),
     handler: async (args: { runner_id?: string; role?: string }) => {
-      const params = new URLSearchParams();
-      if (args.runner_id) params.append("runner_id", args.runner_id);
-      if (args.role) params.append("role", args.role);
+      try {
+        const params = new URLSearchParams();
+        if (args.runner_id) params.append("runner_id", args.runner_id);
+        if (args.role) params.append("role", args.role);
 
-      const result = await conductorRequest("GET", `/agents/status?${params}`);
+        const result = await conductorRequest("GET", `/agents/status?${params}`);
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: (error as Error).message }, null, 2) }],
+        };
+      }
     },
   },
 
@@ -34,16 +35,17 @@ export const AgentTools = {
     description: "List available agent roles and their current assignments",
     parameters: z.object({}),
     handler: async () => {
-      const result = await conductorRequest("GET", "/agents/list");
+      try {
+        const result = await conductorRequest("GET", "/agents/list");
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: (error as Error).message }, null, 2) }],
+        };
+      }
     },
   },
 };

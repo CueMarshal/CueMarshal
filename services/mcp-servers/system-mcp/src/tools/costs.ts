@@ -24,7 +24,7 @@ export const CostTools = {
         // Query Conductor's cost summary endpoint
         const summary = await conductorRequest(
           "GET",
-          `/api/internal/costs/summary?${params}`
+          `/costs/summary?${params}`
         );
 
         return {
@@ -62,7 +62,7 @@ export const CostTools = {
         // Query Conductor's budget endpoint
         const budget = await conductorRequest(
           "GET",
-          `/api/internal/costs/budget?${params}`
+          `/costs/budget?${params}`
         );
 
         return {
