@@ -1,0 +1,100 @@
+{{- if and .Values.sonarqube.enabled .Values.sonarqube.oauthProxy.enabled .Values.auth.google.clientId }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-sonarqube-oauth2-proxy
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: sonarqube-oauth2-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cuemarshal.selectorLabels" . | nindent 6 }}
+      component: sonarqube-oauth2-proxy
+  template:
+    metadata:
+      labels:
+        {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
+        component: sonarqube-oauth2-proxy
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+      - name: oauth2-proxy
+        image: {{ .Values.sonarqube.oauthProxy.image }}
+        args:
+        - --provider=google
+        - --upstream=http://{{ include "cuemarshal.fullname" . }}-sonarqube:9000
+        - --http-address=0.0.0.0:4180
+        - --redirect-url=http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ include "cuemarshal.fqdn" . }}/sonar/oauth2/callback
+        - --email-domain=*
+        - --cookie-secure={{ .Values.ingress.tls.enabled }}
+        - --cookie-name=_oauth2_proxy_sonar
+        - --pass-host-header=true
+        - --pass-access-token=false
+        - --skip-provider-button=false
+        - --set-xauthrequest=true
+        env:
+        - name: OAUTH2_PROXY_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: GOOGLE_CLIENT_ID
+        - name: OAUTH2_PROXY_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: GOOGLE_CLIENT_SECRET
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cuemarshal.fullname" . }}-secrets
+              key: OAUTH2_COOKIE_SECRET
+        ports:
+        - containerPort: 4180
+          name: http
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 4180
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 4180
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-sonarqube-oauth2-proxy
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: sonarqube-oauth2-proxy
+spec:
+  type: ClusterIP
+  ports:
+  - port: 4180
+    targetPort: 4180
+    name: http
+  selector:
+    {{- include "cuemarshal.selectorLabels" . | nindent 4 }}
+    component: sonarqube-oauth2-proxy
+{{- end }}

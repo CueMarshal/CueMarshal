@@ -20,8 +20,19 @@ spec:
       annotations:
         checksum/datasources: {{ include (print $.Template.BasePath "/monitoring/grafana-provisioning.yaml") . | sha256sum }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        fsGroup: 472
       containers:
       - name: grafana
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 472
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         image: {{ .Values.monitoring.grafana.image }}
         env:
         - name: GF_SECURITY_ADMIN_PASSWORD

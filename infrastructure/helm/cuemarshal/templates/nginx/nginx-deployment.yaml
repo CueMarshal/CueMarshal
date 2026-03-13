@@ -17,8 +17,19 @@ spec:
         {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
         component: nginx
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
       containers:
       - name: nginx
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 101
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         image: {{ .Values.nginx.image }}
         ports:
         - name: http

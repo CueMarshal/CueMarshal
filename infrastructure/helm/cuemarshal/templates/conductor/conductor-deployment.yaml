@@ -17,8 +17,19 @@ spec:
         {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
         component: conductor
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
       - name: conductor
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "conductor") }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command: ["/bin/sh", "-c"]

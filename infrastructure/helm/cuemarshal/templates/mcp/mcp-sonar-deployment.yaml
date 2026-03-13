@@ -20,8 +20,19 @@ spec:
         {{- include "cuemarshal.selectorLabels" . | nindent 8 }}
         component: mcp-sonar
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
       - name: mcp-sonar
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         image: {{ include "cuemarshal.image" (dict "Values" .Values "component" "mcp-sonar") }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:

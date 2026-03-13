@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cuemarshal.fullname" . }}-litellm-config
+  labels:
+    {{- include "cuemarshal.labels" . | nindent 4 }}
+    component: gateway
+data:
+  litellm_config.yaml: |
+    model_list:
+      # ═══════════════════════════════════════════════════════
+      # Tier 1: Simple tasks (formatting, docs, typos, labels)
+      # Priority: Groq (1) → Gemini 2.5 Flash (2) → Azure AI (3) → Local (4)
+      # ═══════════════════════════════════════════════════════
+      - model_name: "tier1"
+        litellm_params:
+          model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+          api_key: "os.environ/GROQ_API_KEY"
+          order: 1
+        model_info:
+          max_tokens: 8192
+          mode: chat
+          supports_function_calling: true
+
+      - model_name: "tier1"
+        litellm_params:
+          model: "gemini/gemini-2.5-flash"
+          api_key: "os.environ/GEMINI_API_KEY"
+          order: 2
+        model_info:
+          max_tokens: 8192
+          mode: chat
+          supports_function_calling: true
+
+      - model_name: "tier1"
+        litellm_params:
+          model: "azure_ai/kimi-k2.5"
+          api_key: "os.environ/AZURE_AI_API_KEY"
+          api_base: "os.environ/AZURE_AI_API_BASE"
+          order: 3
+        model_info:
+          max_tokens: 8192
+          mode: chat
+          supports_function_calling: true
+
+      # ═══════════════════════════════════════════════════════
+      # Tier 2: Standard tasks (development, review, testing)
+      # Priority: Gemini 2.5 Pro (1) → Groq Maverick (2) → Azure AI (3) → Local (4)
+      # ═══════════════════════════════════════════════════════
+      - model_name: "tier2"
+        litellm_params:
+          model: "gemini/gemini-2.5-pro"
+          api_key: "os.environ/GEMINI_API_KEY"
+          order: 1
+        model_info:
+          max_tokens: 32768
+          mode: chat
+          supports_function_calling: true
+
+      - model_name: "tier2"
+        litellm_params:
+          model: "groq/meta-llama/llama-4-maverick-17b-128e-instruct"
+          api_key: "os.environ/GROQ_API_KEY"
+          order: 2
+        model_info:
+          max_tokens: 32768
+          mode: chat
+          supports_function_calling: true
+
+      - model_name: "tier2"
+        litellm_params:
+          model: "azure_ai/kimi-k2.5"
+          api_key: "os.environ/AZURE_AI_API_KEY"
+          api_base: "os.environ/AZURE_AI_API_BASE"
+          order: 3
+        model_info:
+          max_tokens: 32768
+          mode: chat
+          supports_function_calling: true
+
+      # ═══════════════════════════════════════════════════════
+      # Tier 3: Complex tasks (architecture, major features)
+      # Priority: Gemini 2.5 Pro (1) → Azure AI (2) → Local (3)
+      # ═══════════════════════════════════════════════════════
+      - model_name: "tier3"
+        litellm_params:
+          model: "gemini/gemini-2.5-pro"
+          api_key: "os.environ/GEMINI_API_KEY"
+          order: 1
+        model_info:
+          max_tokens: 65536
+          mode: chat
+          supports_function_calling: true
+
+      - model_name: "tier3"
+        litellm_params:
+          model: "azure_ai/kimi-k2.5"
+          api_key: "os.environ/AZURE_AI_API_KEY"
+          api_base: "os.environ/AZURE_AI_API_BASE"
+          order: 2
+        model_info:
+          max_tokens: 65536
+          mode: chat
+          supports_function_calling: true
+
+    litellm_settings:
+      success_callback: ["custom_callbacks.CustomCallbackHandler"]
+      failure_callback: ["custom_callbacks.CustomCallbackHandler"]
+      callbacks: ["custom_callbacks.CustomCallbackHandler"]
+      drop_params: true
+      set_verbose: false
+      json_logs: true
+      request_timeout: 600
+      num_retries: 2
+      fallbacks:
+        - tier1:
+            - tier2
+        - tier2:
+            - tier3
+        - tier3:
+            - tier2
+
+    general_settings:
+      master_key: "os.environ/LITELLM_MASTER_KEY"
+      database_url: "os.environ/DATABASE_URL"
+      store_model_in_db: false
+      disable_spend_logs: false

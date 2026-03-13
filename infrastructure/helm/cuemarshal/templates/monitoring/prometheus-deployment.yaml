@@ -22,9 +22,20 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/monitoring/prometheus-config.yaml") . | sha256sum }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       serviceAccountName: {{ include "cuemarshal.fullname" . }}-prometheus
       containers:
       - name: prometheus
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         image: {{ .Values.monitoring.prometheus.image }}
         args:
         - --config.file=/etc/prometheus/prometheus.yml

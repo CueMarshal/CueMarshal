@@ -44,6 +44,13 @@ data:
         # Rate limiting zone
         limit_req_zone $binary_remote_addr zone=webhook_limit:10m rate=10r/s;
         
+        # CORS origin map — echo origin only for known mobile app schemes
+        map $http_origin $cors_origin {
+            default          "";
+            "~^cuemarshal://"      $http_origin;
+            "~^cuemarshal-dev://"  $http_origin;
+        }
+        
         # Upstreams
         upstream gitea {
             server {{ include "cuemarshal.fullname" . }}-gitea:3000;
@@ -97,7 +104,8 @@ data:
                 proxy_set_header X-Forwarded-Port $server_port;
                 
                 # CORS headers for mobile app
-                add_header 'Access-Control-Allow-Origin' '*' always;
+                add_header 'Access-Control-Allow-Origin' $cors_origin always;
+                add_header 'Vary' 'Origin' always;
                 add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, PATCH, DELETE, OPTIONS' always;
                 add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type' always;
                 
@@ -119,7 +127,8 @@ data:
                 proxy_set_header X-Forwarded-Proto $scheme;
                 
                 # CORS headers for mobile app
-                add_header 'Access-Control-Allow-Origin' '*' always;
+                add_header 'Access-Control-Allow-Origin' $cors_origin always;
+                add_header 'Vary' 'Origin' always;
                 add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, PATCH, DELETE, OPTIONS' always;
                 add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type' always;
                 
