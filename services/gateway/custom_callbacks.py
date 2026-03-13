@@ -45,6 +45,9 @@ class CueMarshalCostTracker(CustomLogger):
             try:
                 await asyncio.sleep(self.flush_interval)
                 await self._flush_buffer()
+            except asyncio.CancelledError:
+                # Propagate cancellation so the task shuts down cleanly
+                raise
             except Exception as e:
                 print(f"[error] Periodic flush failed: {str(e)}")
 
@@ -83,6 +86,13 @@ class CueMarshalCostTracker(CustomLogger):
                     print(f"[info] Flushed {result.get('count', 0)} cost records to Conductor")
                     return
 
+            except httpx.TimeoutException as e:
+                print(f"[warn] Timeout sending cost records (attempt {attempt + 1}/{self.retry_attempts}): {str(e)}")
+                if attempt < self.retry_attempts - 1:
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    print(f"[error] DEAD_LETTER: Failed to send cost records after {self.retry_attempts} attempts")
+                    print(json.dumps({"event": "cost_dead_letter", "records": records}))
             except httpx.HTTPError as e:
                 print(f"[warn] Failed to send cost records (attempt {attempt + 1}/{self.retry_attempts}): {str(e)}")
                 if attempt < self.retry_attempts - 1:
@@ -100,11 +110,14 @@ class CueMarshalCostTracker(CustomLogger):
         try:
             metadata = kwargs.get("litellm_params", {}).get("metadata", {})
 
-            # Calculate cost
-            cost = litellm.completion_cost(
-                completion_response=response_obj,
-                model=kwargs.get("model", ""),
-            )
+            # Calculate cost — completion_cost may raise if model pricing is unknown
+            try:
+                cost = litellm.completion_cost(
+                    completion_response=response_obj,
+                    model=kwargs.get("model", ""),
+                )
+            except (litellm.exceptions.NotFoundError, ValueError, KeyError):
+                cost = 0.0
 
             # Extract CueMarshal-specific metadata
             task_id = metadata.get("task_id")

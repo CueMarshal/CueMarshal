@@ -1,3 +1,16 @@
+# YAML anchors for shared model_info and provider credential blocks.
+# LiteLLM ignores unknown top-level keys; these exist only to define anchors.
+x-model-info:
+  small:  &model-info-small  { max_tokens: 8192,  mode: chat, supports_function_calling: true }
+  medium: &model-info-medium { max_tokens: 32768, mode: chat, supports_function_calling: true }
+  large:  &model-info-large  { max_tokens: 65536, mode: chat, supports_function_calling: true }
+
+x-providers:
+  groq:    &provider-groq    { api_key: "os.environ/GROQ_API_KEY" }
+  gemini:  &provider-gemini  { api_key: "os.environ/GEMINI_API_KEY" }
+  azure:   &provider-azure   { api_key: "os.environ/AZURE_AI_API_KEY", api_base: "os.environ/AZURE_AI_API_BASE" }
+  local:   &provider-local   { api_base: "http://host.docker.internal:1234/v1", api_key: "local" }
+
 model_list:
   # ═══════════════════════════════════════════════════════
   # Tier 1: Simple tasks (formatting, docs, typos, labels)
@@ -5,135 +18,93 @@ model_list:
   # ═══════════════════════════════════════════════════════
   - model_name: "tier1"
     litellm_params:
+      <<: *provider-groq
       model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
-      api_key: "os.environ/GROQ_API_KEY"
       order: 1
-    model_info:
-      max_tokens: 8192
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-small
 
   - model_name: "tier1"
     litellm_params:
+      <<: *provider-gemini
       model: "gemini/gemini-2.5-flash"
-      api_key: "os.environ/GEMINI_API_KEY"
       order: 2
-    model_info:
-      max_tokens: 8192
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-small
 
   - model_name: "tier1"
     litellm_params:
+      <<: *provider-azure
       model: "azure_ai/kimi-k2.5"
-      api_key: "os.environ/AZURE_AI_API_KEY"
-      api_base: "os.environ/AZURE_AI_API_BASE"
       order: 3
-    model_info:
-      max_tokens: 8192
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-small
 
   - model_name: "tier1"
     litellm_params:
+      <<: *provider-local
       model: "openai/qwen3-coder-30b"
-      api_base: "http://host.docker.internal:1234/v1"
-      api_key: "local"
       order: 4
-    model_info:
-      max_tokens: 8192
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-small
 
   # ═══════════════════════════════════════════════════════
   # Tier 2: Standard tasks (features, bugs, reviews, tests)
   # ═══════════════════════════════════════════════════════
   - model_name: "tier2"
     litellm_params:
+      <<: *provider-groq
       model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
-      api_key: "os.environ/GROQ_API_KEY"
       order: 1
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "tier2"
     litellm_params:
+      <<: *provider-gemini
       model: "gemini/gemini-2.5-flash"
-      api_key: "os.environ/GEMINI_API_KEY"
       order: 2
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "tier2"
     litellm_params:
+      <<: *provider-azure
       model: "azure_ai/gpt-5.2-chat"
-      api_key: "os.environ/AZURE_AI_API_KEY"
-      api_base: "os.environ/AZURE_AI_API_BASE"
       order: 3
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "tier2"
     litellm_params:
+      <<: *provider-local
       model: "openai/qwen3-coder-30b"
-      api_base: "http://host.docker.internal:1234/v1"
-      api_key: "local"
       order: 4
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   # ═══════════════════════════════════════════════════════
   # Tier 3: Complex tasks (architecture, security, refactor)
   # ═══════════════════════════════════════════════════════
   - model_name: "tier3"
     litellm_params:
+      <<: *provider-groq
       model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
-      api_key: "os.environ/GROQ_API_KEY"
       order: 1
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "tier3"
     litellm_params:
+      <<: *provider-gemini
       model: "gemini/gemini-2.5-flash"
-      api_key: "os.environ/GEMINI_API_KEY"
       order: 2
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "tier3"
     litellm_params:
+      <<: *provider-azure
       model: "azure_ai/gpt-5.2-chat"
-      api_key: "os.environ/AZURE_AI_API_KEY"
-      api_base: "os.environ/AZURE_AI_API_BASE"
       order: 3
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "tier3"
     litellm_params:
+      <<: *provider-local
       model: "openai/qwen3-coder-30b"
-      api_base: "http://host.docker.internal:1234/v1"
-      api_key: "local"
       order: 4
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   # ═══════════════════════════════════════════════════════
   # OpenAI Model Name Aliases
@@ -141,171 +112,115 @@ model_list:
 
   - model_name: "gpt-4o-mini"
     litellm_params:
+      <<: *provider-groq
       model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
-      api_key: "os.environ/GROQ_API_KEY"
       order: 1
-    model_info:
-      max_tokens: 8192
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-small
 
   - model_name: "gpt-4o-mini"
     litellm_params:
+      <<: *provider-gemini
       model: "gemini/gemini-2.5-flash"
-      api_key: "os.environ/GEMINI_API_KEY"
       order: 2
-    model_info:
-      max_tokens: 8192
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-small
 
   - model_name: "gpt-4o-mini"
     litellm_params:
+      <<: *provider-azure
       model: "azure_ai/kimi-k2.5"
-      api_key: "os.environ/AZURE_AI_API_KEY"
-      api_base: "os.environ/AZURE_AI_API_BASE"
       order: 3
-    model_info:
-      max_tokens: 8192
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-small
 
   - model_name: "gpt-4o-mini"
     litellm_params:
+      <<: *provider-local
       model: "openai/qwen3-coder-30b"
-      api_base: "http://host.docker.internal:1234/v1"
-      api_key: "local"
       order: 4
-    model_info:
-      max_tokens: 8192
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-small
 
   - model_name: "gpt-4o"
     litellm_params:
+      <<: *provider-groq
       model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
-      api_key: "os.environ/GROQ_API_KEY"
       order: 1
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "gpt-4o"
     litellm_params:
+      <<: *provider-gemini
       model: "gemini/gemini-2.5-flash"
-      api_key: "os.environ/GEMINI_API_KEY"
       order: 2
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "gpt-4o"
     litellm_params:
+      <<: *provider-azure
       model: "azure_ai/gpt-5.2-chat"
-      api_key: "os.environ/AZURE_AI_API_KEY"
-      api_base: "os.environ/AZURE_AI_API_BASE"
       order: 3
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "gpt-4o"
     litellm_params:
+      <<: *provider-local
       model: "openai/qwen3-coder-30b"
-      api_base: "http://host.docker.internal:1234/v1"
-      api_key: "local"
       order: 4
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "gpt-4.1"
     litellm_params:
+      <<: *provider-groq
       model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
-      api_key: "os.environ/GROQ_API_KEY"
       order: 1
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "gpt-4.1"
     litellm_params:
+      <<: *provider-gemini
       model: "gemini/gemini-2.5-flash"
-      api_key: "os.environ/GEMINI_API_KEY"
       order: 2
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "gpt-4.1"
     litellm_params:
+      <<: *provider-azure
       model: "azure_ai/gpt-5.2-chat"
-      api_key: "os.environ/AZURE_AI_API_KEY"
-      api_base: "os.environ/AZURE_AI_API_BASE"
       order: 3
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "gpt-4.1"
     litellm_params:
+      <<: *provider-local
       model: "openai/qwen3-coder-30b"
-      api_base: "http://host.docker.internal:1234/v1"
-      api_key: "local"
       order: 4
-    model_info:
-      max_tokens: 32768
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-medium
 
   - model_name: "gpt-4.1-mini"
     litellm_params:
+      <<: *provider-groq
       model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
-      api_key: "os.environ/GROQ_API_KEY"
       order: 1
-    model_info:
-      max_tokens: 8192
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-small
 
   - model_name: "gpt-4.1-mini"
     litellm_params:
+      <<: *provider-gemini
       model: "gemini/gemini-2.5-flash"
-      api_key: "os.environ/GEMINI_API_KEY"
       order: 2
-    model_info:
-      max_tokens: 8192
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-small
 
   - model_name: "gpt-4.1-mini"
     litellm_params:
+      <<: *provider-azure
       model: "azure_ai/kimi-k2.5"
-      api_key: "os.environ/AZURE_AI_API_KEY"
-      api_base: "os.environ/AZURE_AI_API_BASE"
       order: 3
-    model_info:
-      max_tokens: 8192
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-small
 
   - model_name: "gpt-4.1-mini"
     litellm_params:
+      <<: *provider-local
       model: "openai/qwen3-coder-30b"
-      api_base: "http://host.docker.internal:1234/v1"
-      api_key: "local"
       order: 4
-    model_info:
-      max_tokens: 8192
-      mode: chat
-      supports_function_calling: true
+    model_info: *model-info-small
 
 router_settings:
   # Use simple-shuffle routing (default, recommended) with order-based priority
