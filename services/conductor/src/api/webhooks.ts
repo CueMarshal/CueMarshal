@@ -4,7 +4,7 @@
 
 import { Router, Request, Response } from "express";
 import { createClient } from "redis";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
 import { verifyWebhookSignature } from "../utils/crypto.js";
 import { validateBearerToken } from "../middleware/auth.js";
@@ -20,7 +20,6 @@ import { db } from "../db/client.js";
 import { projects } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 
-const config = loadConfig();
 const router = Router();
 
 // Redis client for idempotency and loop detection
@@ -361,12 +360,17 @@ async function handleWorkflowCompleted(payload: any) {
   const repo = payload.repository;
   const [owner, repoName] = repo.full_name.split("/");
 
+  // Extract issue number from branch name (e.g. "task/123-fix-foo" → 123)
+  const branchMatch = (run.head_branch as string | undefined)?.match(/[^\d](\d+)/);
+  const issueNumber = branchMatch ? parseInt(branchMatch[1]) : undefined;
+
   await enqueueWorkflowResult({
     owner,
     repo: repoName,
     workflowRunId: run.id,
     status: run.status,
     conclusion: run.conclusion,
+    issueNumber,
   });
 }
 

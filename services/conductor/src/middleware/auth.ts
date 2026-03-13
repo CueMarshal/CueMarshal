@@ -5,10 +5,9 @@
  */
 
 import { Request, Response, NextFunction } from "express";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
 
-const config = loadConfig();
 
 /**
  * Validates Bearer token from Authorization header

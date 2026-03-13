@@ -5,9 +5,8 @@
 
 import pino from "pino";
 import { randomUUID } from "crypto";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 
-const config = loadConfig();
 
 export const logger = pino({
   level: config.logLevel,

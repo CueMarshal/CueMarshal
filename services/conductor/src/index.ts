@@ -12,7 +12,7 @@
 
 import express from "express";
 import { createServer } from "http";
-import { loadConfig } from "./config.js";
+import { config } from "./config.js";
 import { logger } from "./utils/logger.js";
 import { testConnection } from "./db/client.js";
 import { mcpRegistry } from "./services/mcp-registry.js";
@@ -25,7 +25,6 @@ import {
 } from "./queue/worker.js";
 import { recoveryService } from "./queue/recovery.js";
 
-const config = loadConfig();
 
 async function main() {
   logger.info("Starting CueMarshal Conductor...");

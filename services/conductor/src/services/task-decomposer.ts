@@ -5,10 +5,9 @@
 
 import OpenAI from "openai";
 import { z } from "zod";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
 
-const config = loadConfig();
 
 const gateway = new OpenAI({
   baseURL: `${config.gatewayUrl}/v1`,

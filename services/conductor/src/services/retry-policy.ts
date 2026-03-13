@@ -3,10 +3,9 @@
  * Defines retry limits, escalation rules, and backoff strategies
  */
 
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
 
-const config = loadConfig();
 
 export type ModelTier = "tier1" | "tier2" | "tier3";
 export type EscalationAction = "retry" | "escalate" | "human-review";

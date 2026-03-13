@@ -4,14 +4,13 @@
  */
 
 import OpenAI from "openai";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import { mcpRegistry } from "./mcp-registry.js";
 import { db } from "../db/client.js";
 import { chatSessions, chatMessages } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { logger } from "../utils/logger.js";
 
-const config = loadConfig();
 
 const gateway = new OpenAI({
   baseURL: `${config.gatewayUrl}/v1`,

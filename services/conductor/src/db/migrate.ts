@@ -7,9 +7,8 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 
-const config = loadConfig();
 const { Pool } = pg;
 
 async function runMigrations() {

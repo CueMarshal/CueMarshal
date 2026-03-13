@@ -17,7 +17,7 @@ jest.mock("@modelcontextprotocol/sdk/client/sse.js", () => ({
 }));
 
 jest.mock("../../config.js", () => ({
-  loadConfig: () => ({
+  config: ({
     mcpGiteaUrl: "http://mcp-gitea",
     mcpConductorUrl: "http://mcp-conductor",
     mcpSystemUrl: "http://mcp-system",

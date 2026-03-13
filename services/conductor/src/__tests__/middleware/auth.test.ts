@@ -17,7 +17,7 @@ jest.mock("../../utils/logger.js", () => ({
 
 // Mock the config
 jest.mock("../../config.js", () => ({
-  loadConfig: () => ({
+  config: ({
     conductorSecret: "test-secret-token-12345",
   }),
 }));

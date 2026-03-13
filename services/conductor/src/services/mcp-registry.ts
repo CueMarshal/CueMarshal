@@ -6,11 +6,10 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
 import type OpenAI from "openai";
 
-const config = loadConfig();
 
 /** Backoff / retry constants */
 const INITIAL_CONNECT_MAX_RETRIES = 30;       // ~2.5 min with base delay

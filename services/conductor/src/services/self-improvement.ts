@@ -5,7 +5,7 @@
 
 import { readFileSync } from "fs";
 import { workflowTrigger } from "./workflow-trigger.js";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import {
   logger,
   generateCorrelationId,
@@ -20,7 +20,6 @@ import { acquireLock, releaseLock, getTTL, setWithTTL, get as redisGet, del as r
 import { tasksQueue, reviewsQueue, workflowsQueue } from "../queue/jobs.js";
 import { giteaClient } from "./gitea-client.js";
 
-const config = loadConfig();
 
 // Redis keys (PLAN-01)
 const SELF_IMPROVE_LOCK_KEY = "self-improvement:trigger-lock";

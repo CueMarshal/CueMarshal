@@ -3,10 +3,9 @@
  */
 
 import { createClient } from "redis";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import { logger } from "./logger.js";
 
-const config = loadConfig();
 
 // Create Redis client
 const redisClient = createClient({

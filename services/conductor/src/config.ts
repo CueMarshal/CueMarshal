@@ -96,3 +96,6 @@ export function loadConfig(): Config {
     nodeEnv: process.env.NODE_ENV as any,
   });
 }
+
+/** Singleton — import this instead of calling loadConfig() each time */
+export const config = loadConfig();

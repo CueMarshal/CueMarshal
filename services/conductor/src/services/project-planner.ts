@@ -4,12 +4,11 @@
  */
 
 import OpenAI from "openai";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
 import { giteaClient } from "./gitea-client.js";
 import { z } from "zod";
 
-const config = loadConfig();
 
 const gateway = new OpenAI({
   baseURL: `${config.gatewayUrl}/v1`,

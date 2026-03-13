@@ -3,9 +3,8 @@
  */
 
 import { Queue } from "bullmq";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 
-const config = loadConfig();
 
 const redisUrl = new URL(config.redisUrl);
 const redisConnection = {
@@ -61,6 +60,8 @@ export interface WorkflowResultJob {
   workflowRunId: number;
   status: string;
   conclusion: string;
+  /** Issue number extracted from the branch name or workflow inputs, used for precise task lookup */
+  issueNumber?: number;
 }
 
 // Job enqueueing helpers

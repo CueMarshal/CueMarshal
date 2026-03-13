@@ -15,10 +15,9 @@
 import { Router, Request, Response } from "express";
 import { readFile } from "fs/promises";
 import { logger } from "../utils/logger.js";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 
 const router = Router();
-const config = loadConfig();
 
 // ---------------------------------------------------------------------------
 // Cached OAuth2 client ID (read from filesystem, rarely changes)
@@ -130,6 +129,22 @@ router.post("/token", async (req: Request, res: Response) => {
         error: "Missing required body fields: code, code_verifier, redirect_uri",
       });
       return;
+    }
+
+    // Validate redirect_uri against known-good origins (defense-in-depth per RFC 6749 §10.6)
+    const ALLOWED_REDIRECT_PREFIXES = [
+      "cuemarshal://",     // React Native deep-link scheme
+      "cuemarshal-dev://", // Expo Go dev scheme
+    ];
+    if (config.nodeEnv !== "development") {
+      const isAllowed = ALLOWED_REDIRECT_PREFIXES.some((prefix) =>
+        (redirect_uri as string).startsWith(prefix)
+      );
+      if (!isAllowed) {
+        logger.warn({ redirect_uri }, "BFF auth: rejected disallowed redirect_uri");
+        res.status(400).json({ error: "redirect_uri not allowed" });
+        return;
+      }
     }
 
     // Build form-encoded body for Gitea token endpoint

@@ -4,7 +4,7 @@
 
 import { Worker, Job } from "bullmq";
 import { eq, desc } from "drizzle-orm";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { tasks } from "../db/schema.js";
 import { logger } from "../utils/logger.js";
@@ -21,7 +21,6 @@ import type {
   WorkflowResultJob,
 } from "./jobs.js";
 
-const config = loadConfig();
 
 const redisUrl = new URL(config.redisUrl);
 const redisConnection = {
@@ -215,14 +214,28 @@ async function processWorkflowResult(data: WorkflowResultJob) {
 
 async function handleWorkflowFailure(data: WorkflowResultJob) {
   logger.warn({ workflowRunId: data.workflowRunId }, "Workflow failed - implementing retry logic");
-  const taskRecords = await db.select().from(tasks)
-    .where(eq(tasks.giteaRepo, `${data.owner}/${data.repo}`))
-    .orderBy(desc(tasks.updatedAt)).limit(10);
-  if (taskRecords.length === 0) {
+
+  // Prefer lookup by issue number (precise) over latest-by-repo (ambiguous)
+  let task: typeof tasks.$inferSelect | undefined;
+  if (data.issueNumber) {
+    const byIssue = await db.select().from(tasks)
+      .where(eq(tasks.giteaIssueId, data.issueNumber))
+      .limit(1);
+    task = byIssue[0];
+  }
+
+  if (!task) {
+    // Fallback: most recent in_progress/failed task for this repo
+    const taskRecords = await db.select().from(tasks)
+      .where(eq(tasks.giteaRepo, `${data.owner}/${data.repo}`))
+      .orderBy(desc(tasks.updatedAt)).limit(10);
+    task = taskRecords.find((t) => t.status === "in_progress" || t.status === "failed") || taskRecords[0];
+  }
+
+  if (!task) {
     logger.warn({ workflowRunId: data.workflowRunId }, "No task found for failed workflow");
     return;
   }
-  const task = taskRecords.find((t) => t.status === "in_progress" || t.status === "failed") || taskRecords[0];
   const newRetryCount = (task.retryCount || 0) + 1;
   const currentTier = (task.currentTier || "tier1") as ModelTier;
   const decision = retryPolicyService.decideEscalation(currentTier, newRetryCount, task.lastRetryAt);
@@ -274,18 +287,32 @@ async function shouldDecompose(data: TaskAnalyzeJob): Promise<boolean> {
     return false;
   }
 
-  // Decompose if the task description is long or complex
+  // Use complexity score for richer decomposition signal:
+  // decompose if score > 0.80 (architecturally complex) OR word count > 200
+  const { modelSelector } = await import("../services/model-selector.js");
+  const score = await modelSelector.calculateComplexityScore({
+    title: data.issueTitle,
+    body: data.issueBody,
+    labels: data.labels,
+  });
   const wordCount = data.issueTitle.split(/\s+/).length + data.issueBody.split(/\s+/).length;
-  return wordCount > 200; // Simple heuristic
+  return score > 0.80 || wordCount > 200;
 }
 
-const labelCache = new Map<string, Map<string, number>>();
+interface LabelCacheEntry {
+  labelMap: Map<string, number>;
+  expiresAt: number;
+}
+
+const LABEL_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const labelCache = new Map<string, LabelCacheEntry>();
 
 async function getLabelIds(owner: string, labelNames: string[], repo?: string): Promise<number[]> {
   if (labelNames.length === 0) return [];
   const cacheKey = repo ? `${owner}/${repo}` : owner;
 
-  if (!labelCache.has(cacheKey)) {
+  const cached = labelCache.get(cacheKey);
+  if (!cached || Date.now() > cached.expiresAt) {
     const labelMap = new Map<string, number>();
     try {
       const orgLabels = (await giteaClient.getOrgLabels(owner)) as Array<{ id: number; name: string }>;
@@ -297,10 +324,10 @@ async function getLabelIds(owner: string, labelNames: string[], repo?: string): 
         for (const l of repoLabels) labelMap.set(l.name, l.id);
       } catch { /* continue */ }
     }
-    labelCache.set(cacheKey, labelMap);
+    labelCache.set(cacheKey, { labelMap, expiresAt: Date.now() + LABEL_CACHE_TTL_MS });
   }
 
-  const labelMap = labelCache.get(cacheKey)!;
+  const { labelMap } = labelCache.get(cacheKey)!;
   const resolved: number[] = [];
   const unresolved: string[] = [];
   for (const n of labelNames) {
@@ -314,15 +341,24 @@ async function getLabelIds(owner: string, labelNames: string[], repo?: string): 
   return resolved;
 }
 
-// Error handling
+// Error handling — log all failed jobs; alert when max attempts exhausted (dead-letter)
 tasksWorker.on("failed", (job, error) => {
   logger.error({ jobId: job?.id, error: error.message }, "Task job failed");
+  if (job && (job.attemptsMade ?? 0) >= (job.opts?.attempts ?? 1)) {
+    logger.error({ jobId: job.id, jobName: job.name, data: job.data }, "DEAD_LETTER: task job exhausted all retries");
+  }
 });
 
 reviewsWorker.on("failed", (job, error) => {
   logger.error({ jobId: job?.id, error: error.message }, "Review job failed");
+  if (job && (job.attemptsMade ?? 0) >= (job.opts?.attempts ?? 1)) {
+    logger.error({ jobId: job.id, jobName: job.name, data: job.data }, "DEAD_LETTER: review job exhausted all retries");
+  }
 });
 
 workflowsWorker.on("failed", (job, error) => {
   logger.error({ jobId: job?.id, error: error.message }, "Workflow job failed");
+  if (job && (job.attemptsMade ?? 0) >= (job.opts?.attempts ?? 1)) {
+    logger.error({ jobId: job.id, jobName: job.name, data: job.data }, "DEAD_LETTER: workflow job exhausted all retries");
+  }
 });

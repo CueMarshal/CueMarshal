@@ -9,12 +9,11 @@ import { costRecords, projects, tasks } from "../db/schema.js";
 import { logger } from "../utils/logger.js";
 import { z } from "zod";
 import { sql, gte, eq } from "drizzle-orm";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import { selfImprovementService } from "../services/self-improvement.js";
 import { projectPlanner } from "../services/project-planner.js";
 import { validateBearerToken } from "../middleware/auth.js";
 
-const config = loadConfig();
 
 const router = Router();
 

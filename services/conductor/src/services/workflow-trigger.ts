@@ -8,9 +8,8 @@
 
 import { giteaClient } from "./gitea-client.js";
 import { logger } from "../utils/logger.js";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 
-const config = loadConfig();
 
 const TASK_EXECUTE_WORKFLOW = "task-execute.yml";
 const CODE_REVIEW_WORKFLOW = "code-review.yml";

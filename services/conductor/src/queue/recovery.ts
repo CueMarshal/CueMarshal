@@ -17,10 +17,9 @@ import { tasks } from "../db/schema.js";
 import { giteaClient } from "../services/gitea-client.js";
 import { agentRouter } from "../services/agent-router.js";
 import { logger } from "../utils/logger.js";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import { eq } from "drizzle-orm";
 
-const config = loadConfig();
 
 const ACTIONABLE_LABELS = ["self-improvement", "role:architect", "role:developer", "role:tester", "role:devops", "role:docs", "role:reviewer"];
 const SKIP_LABELS = ["skip-automation", "needs-human-review", "status:in-progress"];

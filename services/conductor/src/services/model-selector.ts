@@ -4,14 +4,13 @@
  * Budget-aware model selection with tier downgrade on budget constraints
  */
 
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 import { retryPolicyService, type ModelTier } from "./retry-policy.js";
 import { db } from "../db/client.js";
-import { costRecords } from "../db/schema.js";
+import { costRecords, tasks } from "../db/schema.js";
 import { sql, gte } from "drizzle-orm";
 import { logger } from "../utils/logger.js";
 
-const config = loadConfig();
 
 /**
  * Budget status from database
@@ -212,7 +211,7 @@ export class ModelSelector {
     const baseline = role ? ROLE_BASELINE[role] || "tier2" : "tier2";
 
     // Step 3: Calculate complexity score
-    const score = this.calculateComplexityScore(task);
+    const score = await this.calculateComplexityScore(task);
 
     // Step 4: Map score to tier
     let selectedTier: "tier1" | "tier2" | "tier3";
@@ -236,7 +235,22 @@ export class ModelSelector {
     return this.createSelection(budgetAdjustedTier.tier, task, budgetAdjustedTier.reasoning, budgetStatus, budgetAdjustedTier.wasDowngraded);
   }
 
-  private calculateComplexityScore(task: TaskInput): number {
+  private async getHistoricalEscalationRate(taskType: string): Promise<number> {
+    try {
+      const result = await db
+        .select({ count: sql<string>`COUNT(*)`, escalated: sql<string>`SUM(CASE WHEN ${tasks.retryCount} > 0 THEN 1 ELSE 0 END)` })
+        .from(tasks)
+        .where(sql`${tasks.agentRole} = ${taskType} AND ${tasks.status} IN ('completed', 'failed')`);
+      const total = parseInt(result[0]?.count || "0");
+      if (total < 5) return 0.5; // Not enough data — use neutral value
+      const escalated = parseInt(result[0]?.escalated || "0");
+      return escalated / total;
+    } catch {
+      return 0.5;
+    }
+  }
+
+  async calculateComplexityScore(task: TaskInput): Promise<number> {
     const weights = {
       tokenEstimate: 0.20,
       taskType: 0.35,
@@ -258,7 +272,9 @@ export class ModelSelector {
     const fileMatches = text.match(/\b\w+\.(ts|js|py|go|rs|java|md)\b/g);
     const scopeFactor = fileMatches ? Math.min(fileMatches.length / 10, 1.0) : 0.3;
 
-    const historicalFactor = 0.5;
+    // Dynamic: query avg escalation rate for this task type (falls back to 0.5 if < 5 samples)
+    const role = task.agentRole || (task.labels.find((l) => l.startsWith("role:"))?.split(":")[1]);
+    const historicalFactor = await this.getHistoricalEscalationRate(role || "developer");
 
     const score =
       weights.tokenEstimate * tokenEstimateFactor +

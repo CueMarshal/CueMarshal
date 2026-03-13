@@ -7,10 +7,9 @@ import { Router, Request, Response } from "express";
 import { validateMobileToken } from "../middleware/auth.js";
 import { giteaClient, GiteaClient } from "../services/gitea-client.js";
 import { logger } from "../utils/logger.js";
-import { loadConfig } from "../config.js";
+import { config } from "../config.js";
 
 const router = Router();
-const config = loadConfig();
 
 interface BoardCache {
   data: unknown;

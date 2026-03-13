@@ -128,7 +128,7 @@ router.get("/tasks/:id", async (req: Request, res: Response): Promise<void> => {
  */
 router.get("/dashboard", validateMobileToken, async (req: Request, res: Response) => {
   try {
-    const { conductorOrg, conductorRepo } = await import("../config.js").then(m => m.loadConfig());
+    const { conductorOrg, conductorRepo } = await import("../config.js").then(m => m.config);
 
     // Define expected result type
     interface ToolResult {

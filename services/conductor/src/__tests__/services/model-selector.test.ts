@@ -16,7 +16,7 @@ jest.mock("../../utils/logger.js", () => ({
 
 // Mock the config with default values
 jest.mock("../../config.js", () => ({
-  loadConfig: () => ({
+  config: ({
     totalMonthlyBudgetUsd: 100,
     selfImproveBudgetPct: 10,
     modelSelectorTier1Threshold: 0.30,
