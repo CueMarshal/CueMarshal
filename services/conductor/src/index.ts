@@ -66,11 +66,24 @@ async function main() {
   }));
   app.use(express.urlencoded({ extended: true }));
 
-  // CORS for mobile app
+  // CORS — restrict to known origins; allow wildcard only in development.
+  const ALLOWED_ORIGINS = [
+    "cuemarshal://",          // React Native deep-link scheme
+    config.nodeEnv === "development" ? "*" : null,
+  ].filter(Boolean) as string[];
+
   app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
+    const origin = req.headers.origin || "";
+    const allowed =
+      config.nodeEnv === "development" ||
+      ALLOWED_ORIGINS.some((o) => origin === o || origin.startsWith(o));
+
+    if (allowed && origin) {
+      res.header("Access-Control-Allow-Origin", origin);
+    }
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     res.header("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    res.header("Vary", "Origin");
     if (req.method === "OPTIONS") {
       res.sendStatus(204);
       return;

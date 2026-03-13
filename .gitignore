@@ -2,6 +2,11 @@
 .env
 .env.local
 
+# Editor/tool backup files
+*.backup
+*.bak
+*.orig
+
 # Logs
 logs/
 *.log
