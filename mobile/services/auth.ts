@@ -161,9 +161,14 @@ export const authService = {
       const data = await response.json();
 
       if (data.access_token) {
+        const expiresAt = data.expires_in
+          ? Date.now() + data.expires_in * 1000
+          : undefined;
         return {
           success: true,
           token: data.access_token,
+          refreshToken: data.refresh_token ?? undefined,
+          expiresAt,
         };
       }
 
@@ -249,6 +254,49 @@ export const authService = {
   },
 
   /**
+   * Refresh the access token using the stored refresh token.
+   * Returns a new AuthResult with updated token fields on success.
+   */
+  async refreshAccessToken(): Promise<AuthResult> {
+    try {
+      const refreshToken = await storage.getRefreshToken();
+      if (!refreshToken) {
+        return { success: false, error: 'No refresh token available' };
+      }
+
+      const runtimeConfig = await getGlobalRuntimeConfig();
+      const conductorUrl = runtimeConfig.conductorUrl;
+
+      const response = await fetch(`${conductorUrl}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        await storage.clearAuth();
+        return { success: false, error: errorBody.error || 'Token refresh failed' };
+      }
+
+      const data = await response.json();
+      if (!data.access_token) {
+        return { success: false, error: 'No access token in refresh response' };
+      }
+
+      const expiresAt = data.expires_in ? Date.now() + data.expires_in * 1000 : undefined;
+      await storage.saveToken(data.access_token);
+      if (data.refresh_token) await storage.saveRefreshToken(data.refresh_token);
+      if (expiresAt) await storage.saveTokenExpiresAt(expiresAt);
+
+      return { success: true, token: data.access_token, expiresAt };
+    } catch (error) {
+      console.error('Token refresh error:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Token refresh failed' };
+    }
+  },
+
+  /**
    * Logout and clear stored credentials
    */
   async logout(): Promise<void> {
@@ -261,34 +309,8 @@ export const authService = {
    */
   async generateCodeVerifier(): Promise<string> {
     const randomBytes = await Crypto.getRandomBytesAsync(32);
-    // Convert Uint8Array to base64url string
-    // Use a simple character-based approach compatible with React Native
-    let binary = '';
-    for (let i = 0; i < randomBytes.length; i++) {
-      binary += String.fromCharCode(randomBytes[i]);
-    }
-    // Create base64 from binary string (React Native compatible approach)
-    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-    let base64 = '';
-    for (let i = 0; i < binary.length; i += 3) {
-      const byte1 = binary.charCodeAt(i);
-      const byte2 = i + 1 < binary.length ? binary.charCodeAt(i + 1) : 0;
-      const byte3 = i + 2 < binary.length ? binary.charCodeAt(i + 2) : 0;
-      
-      const enc1 = byte1 >> 2;
-      const enc2 = ((byte1 & 3) << 4) | (byte2 >> 4);
-      const enc3 = ((byte2 & 15) << 2) | (byte3 >> 6);
-      const enc4 = byte3 & 63;
-      
-      base64 += base64Chars[enc1] + base64Chars[enc2];
-      base64 += i + 1 < binary.length ? base64Chars[enc3] : '';
-      base64 += i + 2 < binary.length ? base64Chars[enc4] : '';
-    }
-    // Convert to base64url format (replace + with -, / with _, remove =)
-    return base64
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
+    const binary = String.fromCharCode(...randomBytes);
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   },
 
   /**

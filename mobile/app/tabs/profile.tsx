@@ -1,5 +1,5 @@
-import { View, StyleSheet, ScrollView, Platform, Alert } from 'react-native';
-import { List, Button, Avatar, Text, Switch, Divider, useTheme, Dialog, Portal, TextInput } from 'react-native-paper';
+import { View, StyleSheet, ScrollView } from 'react-native';
+import { List, Button, Avatar, Text, Switch, Divider, useTheme, Dialog, Portal, TextInput, Snackbar } from 'react-native-paper';
 import { useState } from 'react';
 import { useAuthStore } from '../../stores/auth';
 import { spacing } from '../../theme';
@@ -13,6 +13,9 @@ export default function ProfileScreen() {
   const [darkModeEnabled, setDarkModeEnabled] = useState(false);
   const [showUrlDialog, setShowUrlDialog] = useState(false);
   const [editedUrl, setEditedUrl] = useState('');
+  const [snackbar, setSnackbar] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
+
+  const showMessage = (message: string) => setSnackbar({ visible: true, message });
 
   const handleLogout = async () => {
     await logout();
@@ -31,20 +34,10 @@ export default function ProfileScreen() {
     try {
       await saveBaseUrl(editedUrl);
       setShowUrlDialog(false);
-      
-      // Show success message
-      if (Platform.OS === 'web') {
-        alert('Server URL updated successfully');
-      } else {
-        Alert.alert('Success', 'Server URL updated successfully');
-      }
+      showMessage('Server URL updated successfully');
     } catch (error) {
       console.error('Failed to save URL:', error);
-      if (Platform.OS === 'web') {
-        alert('Failed to save URL');
-      } else {
-        Alert.alert('Error', 'Failed to save URL');
-      }
+      showMessage('Failed to save URL');
     }
   };
 
@@ -183,6 +176,14 @@ export default function ProfileScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      <Snackbar
+        visible={snackbar.visible}
+        onDismiss={() => setSnackbar((s) => ({ ...s, visible: false }))}
+        duration={3000}
+      >
+        {snackbar.message}
+      </Snackbar>
     </ScrollView>
   );
 }

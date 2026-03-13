@@ -2,6 +2,8 @@ import * as SecureStore from 'expo-secure-store';
 import { User } from '../types/auth';
 
 const TOKEN_KEY = 'auth_token';
+const REFRESH_TOKEN_KEY = 'auth_refresh_token';
+const TOKEN_EXPIRES_AT_KEY = 'auth_token_expires_at';
 const USER_KEY = 'user_data';
 const BASE_URL_KEY = 'base_url';
 
@@ -47,6 +49,29 @@ export const storage = {
   // Clear all auth data
   async clearAuth(): Promise<void> {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
+    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+    await SecureStore.deleteItemAsync(TOKEN_EXPIRES_AT_KEY);
     await SecureStore.deleteItemAsync(USER_KEY);
+  },
+
+  // Save refresh token securely
+  async saveRefreshToken(token: string): Promise<void> {
+    await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, token);
+  },
+
+  // Retrieve refresh token
+  async getRefreshToken(): Promise<string | null> {
+    return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+  },
+
+  // Save token expiry time (epoch ms)
+  async saveTokenExpiresAt(expiresAt: number): Promise<void> {
+    await SecureStore.setItemAsync(TOKEN_EXPIRES_AT_KEY, String(expiresAt));
+  },
+
+  // Retrieve token expiry time
+  async getTokenExpiresAt(): Promise<number | null> {
+    const val = await SecureStore.getItemAsync(TOKEN_EXPIRES_AT_KEY);
+    return val ? Number(val) : null;
   },
 };

@@ -9,6 +9,8 @@ export interface User {
 export interface AuthResult {
   success: boolean;
   token?: string;
+  refreshToken?: string;
+  expiresAt?: number;
   user?: User;
   error?: string;
 }

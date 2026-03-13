@@ -1,5 +1,5 @@
-import { View, StyleSheet, Alert } from 'react-native';
-import { Button, Text, ActivityIndicator, useTheme } from 'react-native-paper';
+import { View, StyleSheet } from 'react-native';
+import { Button, Text, ActivityIndicator, useTheme, Snackbar } from 'react-native-paper';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../stores/auth';
 import { spacing } from '../../theme';
@@ -9,8 +9,11 @@ import { getGlobalRuntimeConfig } from '../../hooks/useRuntimeConfig';
 export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [configReady, setConfigReady] = useState(!!config.oauth2.clientId);
+  const [snackbar, setSnackbar] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
   const startOAuthFlow = useAuthStore((state) => state.startOAuthFlow);
   const theme = useTheme();
+
+  const showMessage = (message: string) => setSnackbar({ visible: true, message });
 
   // Eagerly discover the OAuth2 client ID on mount so the warning
   // disappears once the conductor is reachable.
@@ -28,11 +31,7 @@ export default function LoginScreen() {
     // Validate configuration before attempting OAuth
     const validation = validateConfig();
     if (!validation.isValid) {
-      Alert.alert(
-        'Configuration Error',
-        `Please configure the app:\n\n${validation.errors.join('\n')}`,
-        [{ text: 'OK' }]
-      );
+      showMessage(`Configuration error: ${validation.errors[0]}`);
       return;
     }
 
@@ -41,18 +40,10 @@ export default function LoginScreen() {
       const result = await startOAuthFlow();
       
       if (!result.success) {
-        Alert.alert(
-          'Authentication Failed',
-          result.error || 'Failed to authenticate with Gitea',
-          [{ text: 'OK' }]
-        );
+        showMessage(result.error || 'Authentication failed');
       }
     } catch (error) {
-      Alert.alert(
-        'Error',
-        error instanceof Error ? error.message : 'An unexpected error occurred',
-        [{ text: 'OK' }]
-      );
+      showMessage(error instanceof Error ? error.message : 'An unexpected error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -104,6 +95,14 @@ export default function LoginScreen() {
           </View>
         )}
       </View>
+
+      <Snackbar
+        visible={snackbar.visible}
+        onDismiss={() => setSnackbar((s) => ({ ...s, visible: false }))}
+        duration={4000}
+      >
+        {snackbar.message}
+      </Snackbar>
     </View>
   );
 }
