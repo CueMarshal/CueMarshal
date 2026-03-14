@@ -61,7 +61,7 @@ RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
       OPENCODE_TARGET="linux-arm64-musl"; \
     else \
-      OPENCODE_TARGET="linux-x64-musl"; \
+      OPENCODE_TARGET="linux-x64-baseline-musl"; \
     fi && \
     curl -fsSL "https://github.com/anomalyco/opencode/releases/download/${OPENCODE_VERSION}/opencode-${OPENCODE_TARGET}.tar.gz" \
       -o /tmp/opencode.tar.gz && \

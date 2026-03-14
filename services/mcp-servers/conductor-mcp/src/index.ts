@@ -14,6 +14,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { ServerResult } from "@modelcontextprotocol/sdk/types.js";
 import { startDualTransportServer } from "@cuemarshal/mcp-shared/transport";
+import type { ZodRawShape } from "zod";
 import { TaskTools } from "./tools/tasks.js";
 import { AgentTools } from "./tools/agents.js";
 import { ProjectTools } from "./tools/projects.js";
@@ -21,6 +22,12 @@ import { SessionTools } from "./tools/sessions.js";
 
 const SERVER_NAME = "conductor-mcp";
 const SERVER_VERSION = "1.0.0";
+
+function getRequiredFields(shape: ZodRawShape): string[] {
+  return Object.entries(shape)
+    .filter(([, schema]) => !schema.isOptional())
+    .map(([key]) => key);
+}
 
 // Create MCP server
 const server = new Server(
@@ -52,9 +59,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       inputSchema: {
         type: "object" as const,
         properties: tool.parameters.shape,
-        required: Object.keys(tool.parameters.shape).filter(
-          (key) => !isZodOptional(tool.parameters.shape[key as keyof typeof tool.parameters.shape])
-        ),
+        required: getRequiredFields(tool.parameters.shape),
       },
     })),
   };
