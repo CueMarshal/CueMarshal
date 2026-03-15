@@ -45,6 +45,22 @@ export async function sendChatMessage(message, sessionId = null) {
  * @param {Object} callbacks - { onChunk, onDone, onError }
  * @returns {Promise<void>}
  */
+function processSseLine(line, { onChunk, onDone, onError }) {
+  if (!line.startsWith('data: ')) return;
+  try {
+    const data = JSON.parse(line.slice(6));
+    if (data.type === 'done') {
+      onDone(data);
+    } else if (data.type === 'error') {
+      onError(new Error(data.message));
+    } else {
+      onChunk(data);
+    }
+  } catch {
+    // ignore malformed SSE lines
+  }
+}
+
 export async function streamChatMessage(message, sessionId, { onChunk, onDone, onError }) {
   const token = await storage.getToken();
   const body = JSON.stringify({
@@ -79,19 +95,7 @@ export async function streamChatMessage(message, sessionId, { onChunk, onDone, o
     buffer = lines.pop() || '';
 
     for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      try {
-        const data = JSON.parse(line.slice(6));
-        if (data.type === 'done') {
-          onDone(data);
-        } else if (data.type === 'error') {
-          onError(new Error(data.message));
-        } else {
-          onChunk(data);
-        }
-      } catch {
-        // ignore malformed SSE lines
-      }
+      processSseLine(line, { onChunk, onDone, onError });
     }
   }
 }

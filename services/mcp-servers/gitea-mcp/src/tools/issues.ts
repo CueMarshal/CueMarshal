@@ -5,6 +5,49 @@
 import { z } from "zod";
 import { giteaRequest } from "../auth.js";
 
+type LabelRecord = { id: number; name: string };
+
+async function fetchAllLabels(owner: string, repo: string, authToken?: string): Promise<LabelRecord[]> {
+  const labels: LabelRecord[] = [];
+  try {
+    labels.push(...(await giteaRequest("GET", `/orgs/${owner}/labels`, undefined, authToken) as LabelRecord[]));
+  } catch { /* continue */ }
+  try {
+    labels.push(...(await giteaRequest("GET", `/repos/${owner}/${repo}/labels`, undefined, authToken) as LabelRecord[]));
+  } catch { /* continue */ }
+  return labels;
+}
+
+async function resolveLabelNames(
+  owner: string, repo: string, labelNames: string[], authToken?: string,
+): Promise<{ resolved: number[] } | { error: object }> {
+  const labels = await fetchAllLabels(owner, repo, authToken);
+  const labelMap = new Map<string, number>(labels.map(l => [l.name, l.id]));
+  const resolved: number[] = [];
+  const unresolved: string[] = [];
+  for (const n of labelNames) {
+    const id = labelMap.get(n);
+    if (id !== undefined) resolved.push(id);
+    else unresolved.push(n);
+  }
+  if (unresolved.length > 0) {
+    return { error: { error: "Label resolution failed", unresolvedLabels: unresolved, availableLabels: Array.from(labelMap.keys()) } };
+  }
+  return { resolved };
+}
+
+async function validateLabelIds(
+  owner: string, repo: string, labelIds: number[], authToken?: string,
+): Promise<null | { error: object }> {
+  const allLabels = await fetchAllLabels(owner, repo, authToken);
+  const valid = new Set(allLabels.map(l => l.id));
+  const invalid = labelIds.filter(id => !valid.has(id));
+  if (invalid.length > 0) {
+    return { error: { error: "Invalid label IDs", invalidLabelIds: invalid, validLabelIds: Array.from(valid) } };
+  }
+  return null;
+}
+
 export const IssueTools = {
   gitea_create_issue: {
     description: "Create a new issue in a Gitea repository. Supports both label IDs and label names (automatically resolved to IDs).",
@@ -33,38 +76,17 @@ export const IssueTools = {
       let labelIds = args.labels || [];
 
       if (args.labelNames?.length) {
-        const labels: Array<{ id: number; name: string }> = [];
-        try {
-          labels.push(...(await giteaRequest("GET", `/orgs/${args.owner}/labels`, undefined, args.authToken) as Array<{ id: number; name: string }>));
-        } catch { /* continue */ }
-        try {
-          labels.push(...(await giteaRequest("GET", `/repos/${args.owner}/${args.repo}/labels`, undefined, args.authToken) as Array<{ id: number; name: string }>));
-        } catch { /* continue */ }
-        const labelMap = new Map<string, number>();
-        for (const l of labels) labelMap.set(l.name, l.id);
-        const unresolved: string[] = [];
-        for (const n of args.labelNames) {
-          const id = labelMap.get(n);
-          if (id !== undefined) labelIds.push(id);
-          else unresolved.push(n);
+        const result = await resolveLabelNames(args.owner, args.repo, args.labelNames, args.authToken);
+        if ("error" in result) {
+          return { content: [{ type: "text", text: JSON.stringify(result.error, null, 2) }] };
         }
-        if (unresolved.length > 0) {
-          return { content: [{ type: "text", text: JSON.stringify({ error: "Label resolution failed", unresolvedLabels: unresolved, availableLabels: Array.from(labelMap.keys()) }, null, 2) }] };
-        }
+        labelIds = [...labelIds, ...result.resolved];
       }
 
       if (labelIds.length > 0) {
-        const allLabels: Array<{ id: number; name: string }> = [];
-        try {
-          allLabels.push(...(await giteaRequest("GET", `/orgs/${args.owner}/labels`, undefined, args.authToken) as Array<{ id: number; name: string }>));
-        } catch { /* continue */ }
-        try {
-          allLabels.push(...(await giteaRequest("GET", `/repos/${args.owner}/${args.repo}/labels`, undefined, args.authToken) as Array<{ id: number; name: string }>));
-        } catch { /* continue */ }
-        const valid = new Set(allLabels.map(l => l.id));
-        const invalid = labelIds.filter(id => !valid.has(id));
-        if (invalid.length > 0) {
-          return { content: [{ type: "text", text: JSON.stringify({ error: "Invalid label IDs", invalidLabelIds: invalid, validLabelIds: Array.from(valid) }, null, 2) }] };
+        const validationError = await validateLabelIds(args.owner, args.repo, labelIds, args.authToken);
+        if (validationError) {
+          return { content: [{ type: "text", text: JSON.stringify(validationError.error, null, 2) }] };
         }
       }
 

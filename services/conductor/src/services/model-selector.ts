@@ -178,42 +178,58 @@ export class ModelSelector {
   /**
     * Select the optimal model tier for a task with failure escalation and budget awareness
     */
+  private pickTierFromComplexityLabel(
+    labels: string[],
+    task: TaskInput,
+    budgetStatus: Awaited<ReturnType<typeof budgetService.getBudgetStatus>>,
+  ): ModelSelection | null {
+    const complexityLabel = labels.find((l) => l.startsWith("complexity:"));
+    if (!complexityLabel) return null;
+    const [, complexity] = complexityLabel.split(":");
+    if (complexity === "simple") return this.createSelection("tier1", task, "Explicit complexity:simple label", budgetStatus);
+    if (complexity === "standard") return this.createSelection("tier2", task, "Explicit complexity:standard label", budgetStatus);
+    if (complexity === "complex") return this.createSelection("tier3", task, "Explicit complexity:complex label", budgetStatus);
+    return null;
+  }
+
+  private handleRetryEscalation(
+    retryCount: number,
+    currentTier: ModelTier | null,
+    lastRetryAt: Date | null,
+    task: TaskInput,
+    budgetStatus: Awaited<ReturnType<typeof budgetService.getBudgetStatus>>,
+  ): ModelSelection | null {
+    if (retryCount <= 0 || !currentTier) return null;
+    const decision = retryPolicyService.decideEscalation(currentTier, retryCount, lastRetryAt);
+    if (decision.shouldStop) {
+      return this.createSelection(currentTier, task, `HUMAN REVIEW REQUIRED: ${decision.reason}`, budgetStatus);
+    }
+    if (decision.nextTier) {
+      return this.createSelection(decision.nextTier, task, decision.reason, budgetStatus);
+    }
+    return null;
+  }
+
   async selectModel(task: TaskInput): Promise<ModelSelection> {
     const retryCount = task.retryCount || 0;
     const currentTier = task.currentTier || null;
     const lastRetryAt = task.lastRetryAt || null;
     
-    // Get budget status early for decision making
     const budgetStatus = await budgetService.getBudgetStatus();
 
-    if (retryCount > 0 && currentTier) {
-      const decision = retryPolicyService.decideEscalation(currentTier, retryCount, lastRetryAt);
-      if (decision.shouldStop) {
-        return this.createSelection(currentTier, task, `HUMAN REVIEW REQUIRED: ${decision.reason}`, budgetStatus);
-      }
-      if (decision.nextTier) {
-        return this.createSelection(decision.nextTier, task, decision.reason, budgetStatus);
-      }
-    }
-    
-    // Step 1: Check for explicit complexity label
-    const complexityLabel = task.labels.find((l) => l.startsWith("complexity:"));
-    if (complexityLabel) {
-      const [, complexity] = complexityLabel.split(":");
-      if (complexity === "simple") return this.createSelection("tier1", task, "Explicit complexity:simple label", budgetStatus);
-      if (complexity === "standard") return this.createSelection("tier2", task, "Explicit complexity:standard label", budgetStatus);
-      if (complexity === "complex") return this.createSelection("tier3", task, "Explicit complexity:complex label", budgetStatus);
-    }
+    const retryResult = this.handleRetryEscalation(retryCount, currentTier, lastRetryAt, task, budgetStatus);
+    if (retryResult) return retryResult;
 
-    // Step 2: Get role baseline
+    const labelResult = this.pickTierFromComplexityLabel(task.labels, task, budgetStatus);
+    if (labelResult) return labelResult;
+
+    // Get role baseline
     const roleLabel = task.labels.find((l) => l.startsWith("role:"));
     const role = roleLabel ? roleLabel.split(":")[1] : task.agentRole;
     const baseline = role ? ROLE_BASELINE[role] || "tier2" : "tier2";
 
-    // Step 3: Calculate complexity score
+    // Calculate complexity score and map to tier
     const score = await this.calculateComplexityScore(task);
-
-    // Step 4: Map score to tier
     let selectedTier: "tier1" | "tier2" | "tier3";
     if (score < config.modelSelectorTier1Threshold) {
       selectedTier = "tier1";
@@ -223,15 +239,11 @@ export class ModelSelector {
       selectedTier = "tier3";
     }
 
-    // Use the higher of baseline and scored tier
     const tierRank = { tier1: 1, tier2: 2, tier3: 3 };
-    let finalTier = tierRank[selectedTier] > tierRank[baseline] ? selectedTier : baseline;
-
+    const finalTier = tierRank[selectedTier] > tierRank[baseline] ? selectedTier : baseline;
     const reasoning = `Score: ${score.toFixed(2)} → ${selectedTier}, Role baseline: ${baseline}, Final: ${finalTier}`;
 
-    // Step 5: Check budget constraints and downgrade if needed
     const budgetAdjustedTier = this.applyBudgetConstraints(finalTier, budgetStatus, reasoning);
-
     return this.createSelection(budgetAdjustedTier.tier, task, budgetAdjustedTier.reasoning, budgetStatus, budgetAdjustedTier.wasDowngraded);
   }
 

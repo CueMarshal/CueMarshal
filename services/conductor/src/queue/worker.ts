@@ -307,23 +307,28 @@ interface LabelCacheEntry {
 const LABEL_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const labelCache = new Map<string, LabelCacheEntry>();
 
+async function fetchLabelMap(owner: string, repo?: string): Promise<Map<string, number>> {
+  const labelMap = new Map<string, number>();
+  try {
+    const orgLabels = (await giteaClient.getOrgLabels(owner)) as Array<{ id: number; name: string }>;
+    for (const l of orgLabels) labelMap.set(l.name, l.id);
+  } catch { /* continue */ }
+  if (repo) {
+    try {
+      const repoLabels = (await giteaClient.getRepoLabels(owner, repo)) as Array<{ id: number; name: string }>;
+      for (const l of repoLabels) labelMap.set(l.name, l.id);
+    } catch { /* continue */ }
+  }
+  return labelMap;
+}
+
 async function getLabelIds(owner: string, labelNames: string[], repo?: string): Promise<number[]> {
   if (labelNames.length === 0) return [];
   const cacheKey = repo ? `${owner}/${repo}` : owner;
 
   const cached = labelCache.get(cacheKey);
   if (!cached || Date.now() > cached.expiresAt) {
-    const labelMap = new Map<string, number>();
-    try {
-      const orgLabels = (await giteaClient.getOrgLabels(owner)) as Array<{ id: number; name: string }>;
-      for (const l of orgLabels) labelMap.set(l.name, l.id);
-    } catch { /* continue */ }
-    if (repo) {
-      try {
-        const repoLabels = (await giteaClient.getRepoLabels(owner, repo)) as Array<{ id: number; name: string }>;
-        for (const l of repoLabels) labelMap.set(l.name, l.id);
-      } catch { /* continue */ }
-    }
+    const labelMap = await fetchLabelMap(owner, repo);
     labelCache.set(cacheKey, { labelMap, expiresAt: Date.now() + LABEL_CACHE_TTL_MS });
   }
 

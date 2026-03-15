@@ -289,45 +289,46 @@ export class MCPRegistry {
     for (let attempt = 0; attempt <= TOOL_EXEC_RETRIES; attempt++) {
       const connection = this.connections.get(serverName);
       if (!connection || !connection.healthy) {
-        // Connection missing or marked unhealthy — try to reconnect
         const reconnected = await this.reconnectServer(serverName);
         if (!reconnected) {
           throw new Error(`MCP server "${serverName}" is not connected and reconnection failed`);
         }
-        // After reconnect the tool may have been re-registered; look it up again
         continue;
       }
 
-      try {
-        const response = await connection.client.callTool(
-          { name, arguments: args },
-          undefined,
-          { timeout: 60000 },
-        );
-        return response;
-      } catch (error) {
-        const isConnectionError = this.isConnectionError(error);
-        logger.error(
-          { error, tool: name, server: serverName, attempt, isConnectionError },
-          "Tool execution failed",
-        );
+      const outcome = await this.attemptToolCall(connection, name, args);
+      if (outcome.success) return outcome.result;
 
-        if (isConnectionError && attempt < TOOL_EXEC_RETRIES) {
-          // Mark unhealthy and retry after reconnect
-          connection.healthy = false;
-          const reconnected = await this.reconnectServer(serverName);
-          if (!reconnected) {
-            throw new Error(`MCP server "${serverName}" reconnection failed after tool error`);
-          }
-          logger.info({ server: serverName, tool: name }, "Retrying tool call after reconnect");
-          continue;
+      const callError = outcome.error;
+      logger.error({ error: callError, tool: name, server: serverName, attempt, isConnectionError: this.isConnectionError(callError) }, "Tool execution failed");
+
+      if (this.isConnectionError(callError) && attempt < TOOL_EXEC_RETRIES) {
+        connection.healthy = false;
+        const reconnected = await this.reconnectServer(serverName);
+        if (!reconnected) {
+          throw new Error(`MCP server "${serverName}" reconnection failed after tool error`);
         }
-
-        throw error;
+        logger.info({ server: serverName, tool: name }, "Retrying tool call after reconnect");
+        continue;
       }
+
+      throw callError;
     }
 
     throw new Error(`Tool execution failed after ${TOOL_EXEC_RETRIES} retries: ${name}`);
+  }
+
+  private async attemptToolCall(
+    connection: { client: { callTool: Function }; healthy: boolean },
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<{ success: true; result: unknown } | { success: false; error: Error }> {
+    try {
+      const result = await connection.client.callTool({ name, arguments: args }, undefined, { timeout: 60000 });
+      return { success: true, result };
+    } catch (error) {
+      return { success: false, error: error as Error };
+    }
   }
 
   // ───────── Health check API ─────────
