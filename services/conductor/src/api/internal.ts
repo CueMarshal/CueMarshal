@@ -261,6 +261,31 @@ router.get("/costs/budget", async (req, res) => {
 
 type AgentEntry = { status: string; active_tasks: number; pending_tasks: number; recent_completed: number; last_activity: string | null };
 
+function processActiveTaskRow(
+  row: { agentRole: string | null; status: string | null; count: string; latestUpdate: string },
+  agentMap: Record<string, AgentEntry>,
+  init: () => AgentEntry,
+): void {
+  const role = row.agentRole || "unassigned";
+  if (!agentMap[role]) agentMap[role] = init();
+  const count = parseInt(row.count);
+  if (row.status === "in_progress" || row.status === "analyzing") {
+    agentMap[role].active_tasks += count;
+    agentMap[role].status = "working";
+  } else if (row.status === "review") {
+    agentMap[role].active_tasks += count;
+    agentMap[role].status = agentMap[role].status === "working" ? "working" : "reviewing";
+  } else if (row.status === "pending") {
+    agentMap[role].pending_tasks += count;
+  }
+  if (row.latestUpdate) {
+    const ts = new Date(row.latestUpdate).toISOString();
+    if (!agentMap[role].last_activity || ts > agentMap[role].last_activity!) {
+      agentMap[role].last_activity = ts;
+    }
+  }
+}
+
 function buildAgentMap(
   activeTasks: Array<{ agentRole: string | null; status: string | null; count: string; latestUpdate: string }>,
   recentCompleted: Array<{ agentRole: string | null; count: string }>,
@@ -268,26 +293,7 @@ function buildAgentMap(
   const agentMap: Record<string, AgentEntry> = {};
   const init = (): AgentEntry => ({ status: "idle", active_tasks: 0, pending_tasks: 0, recent_completed: 0, last_activity: null });
 
-  for (const row of activeTasks) {
-    const role = row.agentRole || "unassigned";
-    if (!agentMap[role]) agentMap[role] = init();
-    const count = parseInt(row.count);
-    if (row.status === "in_progress" || row.status === "analyzing") {
-      agentMap[role].active_tasks += count;
-      agentMap[role].status = "working";
-    } else if (row.status === "review") {
-      agentMap[role].active_tasks += count;
-      agentMap[role].status = agentMap[role].status === "working" ? "working" : "reviewing";
-    } else if (row.status === "pending") {
-      agentMap[role].pending_tasks += count;
-    }
-    if (row.latestUpdate) {
-      const ts = new Date(row.latestUpdate).toISOString();
-      if (!agentMap[role].last_activity || ts > agentMap[role].last_activity!) {
-        agentMap[role].last_activity = ts;
-      }
-    }
-  }
+  for (const row of activeTasks) processActiveTaskRow(row, agentMap, init);
 
   for (const row of recentCompleted) {
     const role = row.agentRole || "unassigned";

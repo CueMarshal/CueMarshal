@@ -245,56 +245,6 @@ export class ChatHandler {
     const toolCallsSummary: Array<{ tool: string; result_summary: string }> = [];
     let fullContent = "";
 
-    const collectStreamChunks = async (stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>): Promise<{
-      chunkContent: string;
-      toolCallEntries: Array<{ id: string; name: string; args: string }>;
-    }> => {
-      const pendingToolCalls: Record<number, { id: string; name: string; args: string }> = {};
-      let chunkContent = "";
-      for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta;
-        if (!delta) continue;
-        if (delta.content) {
-          chunkContent += delta.content;
-          fullContent += delta.content;
-          callbacks.onChunk({ type: "text", delta: delta.content });
-        }
-        if (delta.tool_calls) {
-          for (const tc of delta.tool_calls) {
-            const idx = tc.index;
-            if (!pendingToolCalls[idx]) pendingToolCalls[idx] = { id: tc.id || "", name: tc.function?.name || "", args: "" };
-            if (tc.id) pendingToolCalls[idx].id = tc.id;
-            if (tc.function?.name) pendingToolCalls[idx].name = tc.function.name;
-            if (tc.function?.arguments) pendingToolCalls[idx].args += tc.function.arguments;
-          }
-        }
-      }
-      return { chunkContent, toolCallEntries: Object.values(pendingToolCalls) };
-    };
-
-    const dispatchToolCalls = async (
-      toolCallEntries: Array<{ id: string; name: string; args: string }>,
-    ): Promise<void> => {
-      for (const tc of toolCallEntries) {
-        const toolArgs = JSON.parse(tc.args);
-        if (input.authToken && tc.name.startsWith("gitea_") && !toolArgs.authToken) {
-          toolArgs.authToken = input.authToken;
-        }
-        try {
-          const result = await mcpRegistry.executeTool(tc.name, toolArgs);
-          const resultText = this.extractTextFromMCPResponse(result);
-          history.push({ role: "tool", content: resultText, tool_call_id: tc.id });
-          const summary = this.summarizeResult(tc.name, resultText);
-          toolCallsSummary.push({ tool: tc.name, result_summary: summary });
-          callbacks.onChunk({ type: "tool_call", tool: tc.name, result_summary: summary });
-        } catch (error) {
-          logger.error({ error, tool: tc.name }, "Streaming tool execution failed");
-          history.push({ role: "tool", content: `Error executing ${tc.name}: ${(error as Error).message}`, tool_call_id: tc.id });
-          callbacks.onChunk({ type: "tool_call", tool: tc.name, result_summary: "Failed" });
-        }
-      }
-    };
-
     const streamOnce = async (): Promise<boolean> => {
       const stream = await gateway.chat.completions.create({
         model: config.chatModel,
@@ -304,7 +254,8 @@ export class ChatHandler {
         stream: true,
       });
 
-      const { chunkContent, toolCallEntries } = await collectStreamChunks(stream);
+      const { chunkContent, toolCallEntries } = await this.collectStreamChunks(stream, callbacks);
+      fullContent += chunkContent;
       if (toolCallEntries.length === 0) return false;
 
       history.push({
@@ -317,7 +268,7 @@ export class ChatHandler {
         })),
       } as any);
 
-      await dispatchToolCalls(toolCallEntries);
+      await this.dispatchToolCalls(toolCallEntries, history, toolCallsSummary, callbacks, input.authToken);
       return true;
     };
 
@@ -384,6 +335,59 @@ export class ChatHandler {
       tool_calls: msg.toolCalls as any,
       tool_call_id: msg.toolCallId ?? undefined,
     }));
+  }
+
+  private async collectStreamChunks(
+    stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
+    callbacks: StreamCallbacks,
+  ): Promise<{ chunkContent: string; toolCallEntries: Array<{ id: string; name: string; args: string }> }> {
+    const pendingToolCalls: Record<number, { id: string; name: string; args: string }> = {};
+    let chunkContent = "";
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+      if (!delta) continue;
+      if (delta.content) {
+        chunkContent += delta.content;
+        callbacks.onChunk({ type: "text", delta: delta.content });
+      }
+      if (delta.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const idx = tc.index;
+          if (!pendingToolCalls[idx]) pendingToolCalls[idx] = { id: tc.id || "", name: tc.function?.name || "", args: "" };
+          if (tc.id) pendingToolCalls[idx].id = tc.id;
+          if (tc.function?.name) pendingToolCalls[idx].name = tc.function.name;
+          if (tc.function?.arguments) pendingToolCalls[idx].args += tc.function.arguments;
+        }
+      }
+    }
+    return { chunkContent, toolCallEntries: Object.values(pendingToolCalls) };
+  }
+
+  private async dispatchToolCalls(
+    toolCallEntries: Array<{ id: string; name: string; args: string }>,
+    history: any[],
+    toolCallsSummary: Array<{ tool: string; result_summary: string }>,
+    callbacks: StreamCallbacks,
+    authToken?: string,
+  ): Promise<void> {
+    for (const tc of toolCallEntries) {
+      const toolArgs = JSON.parse(tc.args);
+      if (authToken && tc.name.startsWith("gitea_") && !toolArgs.authToken) {
+        toolArgs.authToken = authToken;
+      }
+      try {
+        const result = await mcpRegistry.executeTool(tc.name, toolArgs);
+        const resultText = this.extractTextFromMCPResponse(result);
+        history.push({ role: "tool", content: resultText, tool_call_id: tc.id });
+        const summary = this.summarizeResult(tc.name, resultText);
+        toolCallsSummary.push({ tool: tc.name, result_summary: summary });
+        callbacks.onChunk({ type: "tool_call", tool: tc.name, result_summary: summary });
+      } catch (error) {
+        logger.error({ error, tool: tc.name }, "Streaming tool execution failed");
+        history.push({ role: "tool", content: `Error executing ${tc.name}: ${(error as Error).message}`, tool_call_id: tc.id });
+        callbacks.onChunk({ type: "tool_call", tool: tc.name, result_summary: "Failed" });
+      }
+    }
   }
 
   private extractTextFromMCPResponse(result: unknown): string {
