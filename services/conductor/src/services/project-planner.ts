@@ -306,25 +306,40 @@ Generate a comprehensive project plan with milestones, issues, and architecture 
   }
 
   /**
-   * Copy workflow files and scanner scripts from the conductor's own Gitea repo
+   * Copy workflow files and scanner scripts from the canonical GitHub source repo
    * into the new project repo so that scheduled scans and agent execution work
    * immediately without manual setup.
+   *
+   * Files are fetched from `config.templateRepoUrl` (defaults to the CueMarshal
+   * GitHub repo on main) so the deployed Docker containers always use the latest
+   * checked-in versions rather than depending on the Gitea conductor repo.
    */
   private async seedWorkflowFiles(owner: string, repo: string): Promise<void> {
-    const srcOwner = config.conductorOrg;
-    const srcRepo = config.conductorRepo;
+    const base = config.templateRepoUrl.replace(/\/$/, "");
+
+    const fetchTemplate = async (remotePath: string): Promise<string | null> => {
+      const url = `${base}/${remotePath}`;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          logger.warn({ url, status: response.status }, "Template file not found on GitHub, skipping");
+          return null;
+        }
+        return response.text();
+      } catch (error) {
+        logger.warn({ error, url }, "Failed to fetch template file from GitHub, skipping");
+        return null;
+      }
+    };
 
     // Workflow YAML files: workflows/*.yml → .gitea/workflows/*.yml
     const workflowResults = await Promise.allSettled(
       WORKFLOW_FILES.map(async (file) => {
-        const content = await giteaClient.getFile(srcOwner, srcRepo, `workflows/${file}`);
-        if (!content) {
-          logger.warn({ file, src: `${srcOwner}/${srcRepo}` }, "Workflow file not found in conductor repo, skipping");
-          return;
-        }
+        const content = await fetchTemplate(`workflows/${file}`);
+        if (!content) return;
         await giteaClient.createOrUpdateFile(owner, repo, `.gitea/workflows/${file}`, {
           content,
-          message: `chore: seed workflow ${file} from conductor`,
+          message: `chore: seed workflow ${file} from CueMarshal template`,
         });
         logger.info({ file, repo: `${owner}/${repo}` }, "Workflow file seeded");
       })
@@ -338,14 +353,11 @@ Generate a comprehensive project plan with milestones, issues, and architecture 
     // Scanner scripts: scripts/scanners/* → scripts/scanners/*
     const scannerResults = await Promise.allSettled(
       SCANNER_FILES.map(async (file) => {
-        const content = await giteaClient.getFile(srcOwner, srcRepo, `scripts/scanners/${file}`);
-        if (!content) {
-          logger.warn({ file, src: `${srcOwner}/${srcRepo}` }, "Scanner file not found in conductor repo, skipping");
-          return;
-        }
+        const content = await fetchTemplate(`scripts/scanners/${file}`);
+        if (!content) return;
         await giteaClient.createOrUpdateFile(owner, repo, `scripts/scanners/${file}`, {
           content,
-          message: `chore: seed scanner script ${file} from conductor`,
+          message: `chore: seed scanner script ${file} from CueMarshal template`,
         });
         logger.info({ file, repo: `${owner}/${repo}` }, "Scanner script seeded");
       })
