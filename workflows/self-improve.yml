@@ -107,7 +107,7 @@ jobs:
           declare -A LABELS=(
             ["self-improvement"]="#0075ca"
             ["complexity:simple"]="#2ea44f"
-            ["complexity:moderate"]="#d876e3"
+            ["complexity:standard"]="#fef2c0"
             ["complexity:complex"]="#e4e669"
             ["source:sonar"]="#fbca04"
           )
@@ -191,7 +191,7 @@ jobs:
              - repo: '${{ env.REPO_NAME }}'
              - title: from the finding's 'title' field
              - body: combine 'description', 'suggested_approach', and 'location' info. Reference the scanner source and priority_score.
-             - labelNames: ['self-improvement', 'role:developer'] plus a complexity label based on effort_estimate (e.g. 'complexity:simple', 'complexity:moderate')
+             - labelNames: ['self-improvement', 'role:developer'] plus a complexity label based on effort_estimate (e.g. 'complexity:simple', 'complexity:standard')
 
           For sonarqube-sourced findings, include metadata.sonar_rule in the body and add 'source:sonar' to labelNames.
 

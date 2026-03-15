@@ -9,6 +9,48 @@ import { logger } from "../utils/logger.js";
 import { giteaClient } from "./gitea-client.js";
 import { z } from "zod";
 
+// Labels that every project repo must have for the agent workflows to function
+const REQUIRED_LABELS: Array<{ name: string; color: string; description: string }> = [
+  // Role labels
+  { name: "role:architect",  color: "#0075ca", description: "Assigned to the architect agent" },
+  { name: "role:developer",  color: "#0075ca", description: "Assigned to the developer agent" },
+  { name: "role:reviewer",   color: "#0075ca", description: "Assigned to the reviewer agent" },
+  { name: "role:tester",     color: "#0075ca", description: "Assigned to the tester agent" },
+  { name: "role:devops",     color: "#0075ca", description: "Assigned to the devops agent" },
+  { name: "role:docs",       color: "#0075ca", description: "Assigned to the docs agent" },
+  { name: "role:linter",     color: "#0075ca", description: "Assigned to the linter agent" },
+  // Complexity labels
+  { name: "complexity:simple",   color: "#2ea44f", description: "Under 4 hours of work" },
+  { name: "complexity:standard", color: "#fef2c0", description: "4–8 hours of work" },
+  { name: "complexity:complex",  color: "#e4e669", description: "Over 8 hours of work" },
+  // Meta labels
+  { name: "self-improvement",    color: "#0075ca", description: "Automated improvement task" },
+  { name: "source:sonar",        color: "#fbca04", description: "Originated from SonarQube scan" },
+  { name: "needs-human-review",  color: "#ee0701", description: "Requires human attention" },
+  { name: "checkpoint",          color: "#f9d0c4", description: "Architecture checkpoint requiring user approval" },
+];
+
+// Workflow files to seed into every project repo (read from the conductor's own Gitea repo)
+const WORKFLOW_FILES = [
+  "task-execute.yml",
+  "code-review.yml",
+  "run-tests.yml",
+  "self-improve.yml",
+  "idle-check.yml",
+  "sonar-scan.yml",
+];
+
+// Scanner scripts to seed alongside the workflows (required by self-improve.yml)
+const SCANNER_FILES = [
+  "run-all-scanners.sh",
+  "scan-todo-markers.sh",
+  "scan-dependency-updates.sh",
+  "scan-test-coverage.sh",
+  "scan-stale-docs.sh",
+  "scan-sonar.sh",
+  "scanner-config.json",
+];
+
 
 const gateway = new OpenAI({
   baseURL: `${config.gatewayUrl}/v1`,
@@ -131,7 +173,8 @@ Generate a comprehensive project plan with milestones, issues, and architecture 
   }
 
   /**
-   * Execute an approved project plan by creating milestones and issues in Gitea
+   * Execute an approved project plan by creating milestones and issues in Gitea.
+   * Also seeds required labels, workflow files, and scanner scripts into the repo.
    */
   async executePlan(
     owner: string,
@@ -139,6 +182,10 @@ Generate a comprehensive project plan with milestones, issues, and architecture 
     plan: ProjectPlan
   ): Promise<{ milestones: any[]; issues: any[] }> {
     logger.info({ repo: `${owner}/${repo}`, milestones: plan.milestones.length, issues: plan.issues.length }, "Executing project plan");
+
+    // Bootstrap the repository with labels, workflows, and scanner scripts before
+    // creating issues (labels must exist before getLabelIds can resolve them).
+    await this.setupProjectRepository(owner, repo);
 
     const createdMilestones: any[] = [];
     const createdIssues: any[] = [];
@@ -214,6 +261,100 @@ Generate a comprehensive project plan with milestones, issues, and architecture 
       closed_issues: closedCount,
       progress_pct: total > 0 ? Math.round((closedCount / total) * 100) : 0,
     };
+  }
+
+  /**
+   * Bootstrap a new project repository with the labels, workflow files, and
+   * scanner scripts that every CueMarshal-managed project needs.
+   */
+  private async setupProjectRepository(owner: string, repo: string): Promise<void> {
+    logger.info({ repo: `${owner}/${repo}` }, "Setting up project repository");
+    await Promise.allSettled([
+      this.seedRequiredLabels(owner, repo),
+      this.seedWorkflowFiles(owner, repo),
+    ]);
+    logger.info({ repo: `${owner}/${repo}` }, "Project repository setup complete");
+  }
+
+  /**
+   * Seed all required labels into the project repo so that issue creation and
+   * self-improvement workflows can assign them without missing-label warnings.
+   */
+  private async seedRequiredLabels(owner: string, repo: string): Promise<void> {
+    let existing: any[] = [];
+    try {
+      const result = await giteaClient.getRepoLabels(owner, repo);
+      existing = Array.isArray(result) ? result : [];
+    } catch (error) {
+      logger.warn({ error, repo: `${owner}/${repo}` }, "Could not fetch existing labels; will attempt to create all");
+    }
+
+    const existingNames = new Set(existing.map((l: any) => l.name as string));
+
+    for (const label of REQUIRED_LABELS) {
+      if (existingNames.has(label.name)) {
+        logger.debug({ label: label.name }, "Label already exists, skipping");
+        continue;
+      }
+      try {
+        await giteaClient.createRepoLabel(owner, repo, label);
+        logger.info({ label: label.name, repo: `${owner}/${repo}` }, "Label created");
+      } catch (error) {
+        logger.warn({ error, label: label.name, repo: `${owner}/${repo}` }, "Failed to create label, continuing");
+      }
+    }
+  }
+
+  /**
+   * Copy workflow files and scanner scripts from the conductor's own Gitea repo
+   * into the new project repo so that scheduled scans and agent execution work
+   * immediately without manual setup.
+   */
+  private async seedWorkflowFiles(owner: string, repo: string): Promise<void> {
+    const srcOwner = config.conductorOrg;
+    const srcRepo = config.conductorRepo;
+
+    // Workflow YAML files: workflows/*.yml → .gitea/workflows/*.yml
+    const workflowResults = await Promise.allSettled(
+      WORKFLOW_FILES.map(async (file) => {
+        const content = await giteaClient.getFile(srcOwner, srcRepo, `workflows/${file}`);
+        if (!content) {
+          logger.warn({ file, src: `${srcOwner}/${srcRepo}` }, "Workflow file not found in conductor repo, skipping");
+          return;
+        }
+        await giteaClient.createOrUpdateFile(owner, repo, `.gitea/workflows/${file}`, {
+          content,
+          message: `chore: seed workflow ${file} from conductor`,
+        });
+        logger.info({ file, repo: `${owner}/${repo}` }, "Workflow file seeded");
+      })
+    );
+    workflowResults.forEach((r, i) => {
+      if (r.status === "rejected") {
+        logger.warn({ error: r.reason, file: WORKFLOW_FILES[i] }, "Failed to seed workflow file");
+      }
+    });
+
+    // Scanner scripts: scripts/scanners/* → scripts/scanners/*
+    const scannerResults = await Promise.allSettled(
+      SCANNER_FILES.map(async (file) => {
+        const content = await giteaClient.getFile(srcOwner, srcRepo, `scripts/scanners/${file}`);
+        if (!content) {
+          logger.warn({ file, src: `${srcOwner}/${srcRepo}` }, "Scanner file not found in conductor repo, skipping");
+          return;
+        }
+        await giteaClient.createOrUpdateFile(owner, repo, `scripts/scanners/${file}`, {
+          content,
+          message: `chore: seed scanner script ${file} from conductor`,
+        });
+        logger.info({ file, repo: `${owner}/${repo}` }, "Scanner script seeded");
+      })
+    );
+    scannerResults.forEach((r, i) => {
+      if (r.status === "rejected") {
+        logger.warn({ error: r.reason, file: SCANNER_FILES[i] }, "Failed to seed scanner script");
+      }
+    });
   }
 
   /**

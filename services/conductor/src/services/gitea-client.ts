@@ -384,6 +384,48 @@ export class GiteaClient {
   }) {
     return this.request("POST", `/repos/${owner}/${repo}/pulls/${prNumber}/reviews`, data);
   }
+
+  // File reading
+  async getFile(owner: string, repo: string, path: string, ref?: string): Promise<string | null> {
+    try {
+      const queryParams = ref ? `?ref=${encodeURIComponent(ref)}` : "";
+      const result = await this.request<{ content: string; encoding: string }>(
+        "GET",
+        `/repos/${owner}/${repo}/contents/${path}${queryParams}`
+      );
+      if (result?.content) {
+        return Buffer.from(result.content.replace(/\n/g, ""), "base64").toString("utf-8");
+      }
+      return null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("404") || message.includes("(404)")) return null;
+      throw error;
+    }
+  }
+
+  // Repo-level label operations
+  async createRepoLabel(owner: string, repo: string, data: {
+    name: string;
+    color: string;
+    description?: string;
+  }) {
+    return this.request("POST", `/repos/${owner}/${repo}/labels`, data);
+  }
+
+  // Repo-level webhook operations
+  async createRepoWebhook(owner: string, repo: string, data: {
+    type: string;
+    config: {
+      url: string;
+      content_type: string;
+      secret: string;
+    };
+    events: string[];
+    active: boolean;
+  }) {
+    return this.request("POST", `/repos/${owner}/${repo}/hooks`, data);
+  }
 }
 
 export const giteaClient = new GiteaClient();
