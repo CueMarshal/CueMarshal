@@ -43,7 +43,7 @@ REPORT_DIR="${REPORT_DIR:-${PROJECT_PATH}/reports}"
 
 SONAR_CONTAINER="sonarqube-scan-${$}"
 SONAR_NETWORK="sonarqube-net-${$}"
-TOKEN_NAME="${PROJECT_NAME}-scanner-${DATE}"
+TOKEN_NAME="${PROJECT_NAME}-scanner-${DATE}-$$"
 PROJECT_KEY="${PROJECT_NAME}"
 
 # ──────────────────────────────────────────────────────────────
@@ -301,6 +301,8 @@ until [ "$(curl -sf -u "admin:${SONAR_ADMIN_PASS}" \
 done
 echo ""
 ok "Analysis tasks complete"
+# Brief pause to allow SonarQube's search index to catch up before querying issues
+sleep 5
 
 # ──────────────────────────────────────────────────────────────
 # Step 9: Fetch issues and generate markdown reports
