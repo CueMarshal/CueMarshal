@@ -220,7 +220,7 @@ export default function ProjectBoard() {
             </button>
             {showRepoPicker && repos.length > 0 && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowRepoPicker(false)} />
+                <div className="fixed inset-0 z-10" role="presentation" onClick={() => setShowRepoPicker(false)} />
                 <div className="absolute right-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1 max-h-60 overflow-y-auto">
                   {repos.map((r) => (
                     <button

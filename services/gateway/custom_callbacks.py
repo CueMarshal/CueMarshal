@@ -5,7 +5,7 @@ Tracks LLM costs per task, project, and agent role.
 
 import litellm
 from litellm.integrations.custom_logger import CustomLogger
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 import asyncio
@@ -34,10 +34,10 @@ class CueMarshalCostTracker(CustomLogger):
         self.buffer_size = int(os.getenv("COST_BUFFER_SIZE", "10"))
         self.flush_interval = int(os.getenv("COST_FLUSH_INTERVAL", "30"))
         self.retry_attempts = int(os.getenv("COST_RETRY_ATTEMPTS", "3"))
-        self.last_flush_time = datetime.utcnow()
+        self.last_flush_time = datetime.now(timezone.utc)
 
-        # Start background flush task
-        asyncio.create_task(self._periodic_flush())
+        # Start background flush task — stored to prevent premature GC
+        self._flush_task = asyncio.create_task(self._periodic_flush())
 
     async def _periodic_flush(self):
         """Periodically flush buffer to avoid data loss."""
@@ -59,14 +59,14 @@ class CueMarshalCostTracker(CustomLogger):
 
             if not force and len(self.buffer) < self.buffer_size:
                 # Check if we should flush based on time
-                elapsed = (datetime.utcnow() - self.last_flush_time).total_seconds()
+                elapsed = (datetime.now(timezone.utc) - self.last_flush_time).total_seconds()
                 if elapsed < self.flush_interval:
                     return
 
             # Take current buffer and clear it
             records_to_send = self.buffer[:]
             self.buffer = []
-            self.last_flush_time = datetime.utcnow()
+            self.last_flush_time = datetime.now(timezone.utc)
 
         # Send to Conductor (outside lock to avoid blocking)
         await self._send_to_conductor(records_to_send)
@@ -136,7 +136,7 @@ class CueMarshalCostTracker(CustomLogger):
 
             # Log for observability
             log_data = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "event": "llm_success",
                 "task_id": task_id,
                 "project": project,
@@ -160,7 +160,7 @@ class CueMarshalCostTracker(CustomLogger):
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
                 "cost_usd": round(cost, 6),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             # Add to buffer
@@ -190,7 +190,7 @@ class CueMarshalCostTracker(CustomLogger):
 
             # Log failure
             log_data = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "event": "llm_failure",
                 "task_id": task_id,
                 "project": project,

@@ -73,7 +73,7 @@ export default function SessionSidebar({
     if (!isOpen) return null;
     return (
       <div className="fixed inset-0 z-50 md:hidden">
-        <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={onClose} />
+        <div className="absolute inset-0 bg-black/40 animate-fade-in" role="presentation" onClick={onClose} />
         <div className="absolute left-0 top-0 bottom-0 w-[min(280px,85vw)] bg-white dark:bg-dark-surface flex flex-col shadow-2xl animate-slide-in-left">
           {renderContent(true)}
         </div>
@@ -154,7 +154,10 @@ export default function SessionSidebar({
                 return (
                   <div
                     key={session.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onSelectSession(session.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectSession(session.id); }}
                     className={`group relative px-3 py-2.5 mx-2 mb-0.5 rounded-lg cursor-pointer transition-all ${
                       isActive
                         ? 'bg-cuemarshal-blue/10 dark:bg-cuemarshal-blue/20 border-l-2 border-cuemarshal-blue'

@@ -102,7 +102,7 @@ export class AgentRouter {
     const slug = title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
+      .replace(/(^-+|-+$)/g, "")
       .substring(0, 40);
 
     return `${prefix}/issue-${issueNumber}-${slug}`;
