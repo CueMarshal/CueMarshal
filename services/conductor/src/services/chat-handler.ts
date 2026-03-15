@@ -337,6 +337,17 @@ export class ChatHandler {
     }));
   }
 
+  private accumulatePendingToolCall(
+    tc: { index: number; id?: string; function?: { name?: string; arguments?: string } },
+    pendingToolCalls: Record<number, { id: string; name: string; args: string }>,
+  ): void {
+    const idx = tc.index;
+    if (!pendingToolCalls[idx]) pendingToolCalls[idx] = { id: tc.id || "", name: tc.function?.name || "", args: "" };
+    if (tc.id) pendingToolCalls[idx].id = tc.id;
+    if (tc.function?.name) pendingToolCalls[idx].name = tc.function.name;
+    if (tc.function?.arguments) pendingToolCalls[idx].args += tc.function.arguments;
+  }
+
   private async collectStreamChunks(
     stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
     callbacks: StreamCallbacks,
@@ -351,13 +362,7 @@ export class ChatHandler {
         callbacks.onChunk({ type: "text", delta: delta.content });
       }
       if (delta.tool_calls) {
-        for (const tc of delta.tool_calls) {
-          const idx = tc.index;
-          if (!pendingToolCalls[idx]) pendingToolCalls[idx] = { id: tc.id || "", name: tc.function?.name || "", args: "" };
-          if (tc.id) pendingToolCalls[idx].id = tc.id;
-          if (tc.function?.name) pendingToolCalls[idx].name = tc.function.name;
-          if (tc.function?.arguments) pendingToolCalls[idx].args += tc.function.arguments;
-        }
+        for (const tc of delta.tool_calls) this.accumulatePendingToolCall(tc, pendingToolCalls);
       }
     }
     return { chunkContent, toolCallEntries: Object.values(pendingToolCalls) };
