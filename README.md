@@ -1,15 +1,17 @@
 # CueMarshal – AI-Powered DevOps for Software Teams
 
-**Stop context-switching. Your entire workflow lives in Git.**
+**From issue to reviewed PR without leaving Git.**
 
-CueMarshal is self-hosted AI DevOps — like GitHub Actions with Claude built in. Create an issue. Specialized AI agents handle the busy work. You review, merge, ship.
+CueMarshal is self-hosted AI DevOps: **GitHub Actions + an AI engineering orchestra** on your own infrastructure. Open an issue, and CueMarshal plans, builds, reviews, tests, and documents the change through Git-native branches and pull requests. You keep final control: review every PR, request edits, and merge when ready.
 
-- **Architect** — designs the solution and opens a spec PR
-- **Developer** — writes the code on a feature branch
-- **Reviewer** — checks for bugs, security issues, and code quality
-- **Tester** — runs test suites and verifies functionality
-- **DevOps** — handles infrastructure and deployment tasks
-- **Docs** — keeps documentation up to date automatically
+- **Marshal (Conductor)** — routes work and keeps execution moving
+- **Ava (Architect)** — designs the solution and opens a spec PR
+- **Dave (Developer)** — writes the implementation on a feature branch
+- **Reese (Reviewer)** — checks for bugs, risks, and code quality issues
+- **Tess (Tester)** — runs test suites and validates behavior
+- **Devin (DevOps)** — handles infrastructure and deployment tasks
+- **Dot (Docs)** — keeps documentation clear and current
+- **Linton (Linter)** — enforces code quality checks before merge
 
 Every step lives in Gitea as issues, branches, pull requests, and labels. Full audit trail. Full human control.
 
@@ -32,6 +34,25 @@ Every step lives in Gitea as issues, branches, pull requests, and labels. Full a
 - **Better quality** — AI reviewers catch security issues humans miss
 - **Data sovereignty** — Your code never leaves your servers
 - **Cost control** — ~$0.50/issue in API costs vs $100+/month in cloud CI
+
+[Quick Start](#quick-start) · [Architecture](docs/architecture/overview.md) · [Agents](docs/features/agents/overview.md) · [Documentation](#documentation)
+
+---
+
+## Meet the Orchestra
+
+Each team member has a distinct avatar and working style, so activity feels like a real engineering squad instead of a black box.
+
+| Avatar | Member | Role | Personality |
+|---|---|---|---|
+| <img src="docs/assets/avatars/marshal.png" width="44" alt="Marshal avatar" /> | **Marshal** | Conductor | Starts the symphony and coordinates handoffs |
+| <img src="docs/assets/avatars/ava.png" width="44" alt="Ava avatar" /> | **Ava** | Architect | Wise visionary planner |
+| <img src="docs/assets/avatars/dave.png" width="44" alt="Dave avatar" /> | **Dave** | Developer | Industrious builder |
+| <img src="docs/assets/avatars/reese.png" width="44" alt="Reese avatar" /> | **Reese** | Reviewer | Laser-sharp critic |
+| <img src="docs/assets/avatars/tess.png" width="44" alt="Tess avatar" /> | **Tess** | Tester | Clever bug washer |
+| <img src="docs/assets/avatars/devin.png" width="44" alt="Devin avatar" /> | **Devin** | DevOps | Master multi-tasker |
+| <img src="docs/assets/avatars/dot.png" width="44" alt="Dot avatar" /> | **Dot** | Docs | Explains it clearly |
+| <img src="docs/assets/avatars/linton.png" width="44" alt="Linton avatar" /> | **Linton** | Linter | Picky perfectionist |
 
 ---
 
@@ -64,7 +85,7 @@ Open **http://localhost:3300** — Gitea is ready.
 ## What's Implemented
 
 - ✅ Conductor orchestrator (task decomposition + agent routing)
-- ✅ 6 specialized AI agents (architect, developer, reviewer, tester, devops, docs)
+- ✅ 7 specialized AI agents (architect, developer, reviewer, tester, devops, docs, linter)
 - ✅ Git Flow execution (issue → branch → PR → review → merge)
 - ✅ LiteLLM gateway with 3-provider fallback (Groq → Gemini → Azure)
 - ✅ MCP servers for tool access (Gitea, Conductor, System)
@@ -90,7 +111,9 @@ User creates issue in Gitea
     │  Developer  →  implementation PR      │
     │  Reviewer   →  review comments + fix  │
     │  Tester     →  test results           │
+    │  DevOps     →  infra/deployment PR    │
     │  Docs       →  documentation PR       │
+    │  Linter     →  pre-merge quality gate │
     └────────────────────────────────────────┘
          │
     Human reviews + merges
@@ -118,7 +141,8 @@ User (Mobile App / Gitea UI)
     ├── Tester Agent
     ├── Architect Agent
     ├── DevOps Agent
-    └── Docs Agent
+    ├── Docs Agent
+    └── Linter Agent
 ```
 
 See [Architecture Overview](docs/architecture/overview.md) for full diagrams and data flows.
