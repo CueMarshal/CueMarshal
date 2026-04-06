@@ -66,6 +66,8 @@ llm:
   groqApiKey: "gsk_..."
   # OR
   geminiApiKey: "AIzaSy..."
+  geminiApiKey2: "AIzaSy..." # Optional extra Gemini key for same-order load balancing
+  geminiApiKey3: "AIzaSy..." # Optional extra Gemini key for same-order load balancing
   # OR
   azureAiApiKey: "..."
   azureAiApiBase: "https://..."

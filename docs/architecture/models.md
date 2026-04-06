@@ -124,7 +124,7 @@ opencode run "Work on issue #$ISSUE_NUMBER..." --model "litellm/$MODEL_ID"
 | Provider | Env Var | Used By | Type |
 |----------|---------|---------|------|
 | Groq | `GROQ_API_KEY` | tier1, tier2 primary | Free tier (rate-limited) |
-| Gemini | `GEMINI_API_KEY` | tier1, tier2 fallback, tier3 fallback | Free tier (quota can exhaust) |
+| Gemini | `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3` | tier1, tier2 fallback, tier3 fallback with same-order load balancing | Free tier (quota can exhaust) |
 | Azure AI | `AZURE_AI_API_KEY` + `AZURE_AI_API_BASE` | tier3 primary, all tiers last-resort | Paid (reliable) |
 | LiteLLM Master | `LITELLM_MASTER_KEY` / `GATEWAY_API_KEY` | Gateway auth, runner proxy | — |
 

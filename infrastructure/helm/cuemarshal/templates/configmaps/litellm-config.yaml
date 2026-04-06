@@ -10,7 +10,7 @@ data:
     model_list:
       # ═══════════════════════════════════════════════════════
       # Tier 1: Simple tasks (formatting, docs, typos, labels)
-      # Priority: Groq (1) → Gemini 2.5 Flash (2) → Azure AI (3) → Local (4)
+      # Priority: Groq (1) → Gemini 2.5 Flash (2, load-balanced across keys) → Azure AI (3) → Local (4)
       # ═══════════════════════════════════════════════════════
       - model_name: "tier1"
         litellm_params:
@@ -34,6 +34,26 @@ data:
 
       - model_name: "tier1"
         litellm_params:
+          model: "gemini/gemini-2.5-flash"
+          api_key: "os.environ/GEMINI_API_KEY_2"
+          order: 2
+        model_info:
+          max_tokens: 8192
+          mode: chat
+          supports_function_calling: true
+
+      - model_name: "tier1"
+        litellm_params:
+          model: "gemini/gemini-2.5-flash"
+          api_key: "os.environ/GEMINI_API_KEY_3"
+          order: 2
+        model_info:
+          max_tokens: 8192
+          mode: chat
+          supports_function_calling: true
+
+      - model_name: "tier1"
+        litellm_params:
           model: "azure_ai/kimi-k2.5"
           api_key: "os.environ/AZURE_AI_API_KEY"
           api_base: "os.environ/AZURE_AI_API_BASE"
@@ -45,12 +65,32 @@ data:
 
       # ═══════════════════════════════════════════════════════
       # Tier 2: Standard tasks (development, review, testing)
-      # Priority: Gemini 2.5 Pro (1) → Groq Maverick (2) → Azure AI (3) → Local (4)
+      # Priority: Gemini 2.5 Pro (1, load-balanced across keys) → Groq Maverick (2) → Azure AI (3) → Local (4)
       # ═══════════════════════════════════════════════════════
       - model_name: "tier2"
         litellm_params:
           model: "gemini/gemini-2.5-pro"
           api_key: "os.environ/GEMINI_API_KEY"
+          order: 1
+        model_info:
+          max_tokens: 32768
+          mode: chat
+          supports_function_calling: true
+
+      - model_name: "tier2"
+        litellm_params:
+          model: "gemini/gemini-2.5-pro"
+          api_key: "os.environ/GEMINI_API_KEY_2"
+          order: 1
+        model_info:
+          max_tokens: 32768
+          mode: chat
+          supports_function_calling: true
+
+      - model_name: "tier2"
+        litellm_params:
+          model: "gemini/gemini-2.5-pro"
+          api_key: "os.environ/GEMINI_API_KEY_3"
           order: 1
         model_info:
           max_tokens: 32768
@@ -80,12 +120,32 @@ data:
 
       # ═══════════════════════════════════════════════════════
       # Tier 3: Complex tasks (architecture, major features)
-      # Priority: Gemini 2.5 Pro (1) → Azure AI (2) → Local (3)
+      # Priority: Gemini 2.5 Pro (1, load-balanced across keys) → Azure AI (2) → Local (3)
       # ═══════════════════════════════════════════════════════
       - model_name: "tier3"
         litellm_params:
           model: "gemini/gemini-2.5-pro"
           api_key: "os.environ/GEMINI_API_KEY"
+          order: 1
+        model_info:
+          max_tokens: 65536
+          mode: chat
+          supports_function_calling: true
+
+      - model_name: "tier3"
+        litellm_params:
+          model: "gemini/gemini-2.5-pro"
+          api_key: "os.environ/GEMINI_API_KEY_2"
+          order: 1
+        model_info:
+          max_tokens: 65536
+          mode: chat
+          supports_function_calling: true
+
+      - model_name: "tier3"
+        litellm_params:
+          model: "gemini/gemini-2.5-pro"
+          api_key: "os.environ/GEMINI_API_KEY_3"
           order: 1
         model_info:
           max_tokens: 65536
@@ -111,7 +171,7 @@ data:
       set_verbose: false
       json_logs: true
       request_timeout: 600
-      num_retries: 2
+      num_retries: 4
       fallbacks:
         - tier1:
             - tier2

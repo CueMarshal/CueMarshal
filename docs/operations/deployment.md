@@ -52,6 +52,8 @@ CONDUCTOR_URL=http://conductor:4000
 # ═══════════════════════════════════════════
 GROQ_API_KEY=gsk_...
 GEMINI_API_KEY=AIza...
+GEMINI_API_KEY_2=AIza... # Optional extra Gemini key
+GEMINI_API_KEY_3=AIza... # Optional extra Gemini key
 AZURE_AI_API_KEY=...
 AZURE_AI_API_BASE=https://<your-resource>.openai.azure.com
 
@@ -320,6 +322,8 @@ services:
       - AZURE_AI_API_KEY=${AZURE_AI_API_KEY}
       - AZURE_AI_API_BASE=${AZURE_AI_API_BASE}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_API_KEY_2=${GEMINI_API_KEY_2}
+      - GEMINI_API_KEY_3=${GEMINI_API_KEY_3}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/litellm
       - REDIS_HOST=redis

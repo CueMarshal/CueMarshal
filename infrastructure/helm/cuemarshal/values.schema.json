@@ -44,6 +44,8 @@
       "properties": {
         "groqApiKey": { "type": "string" },
         "geminiApiKey": { "type": "string" },
+        "geminiApiKey2": { "type": "string" },
+        "geminiApiKey3": { "type": "string" },
         "azureAiApiKey": { "type": "string" },
         "azureAiApiBase": { "type": "string" }
       },

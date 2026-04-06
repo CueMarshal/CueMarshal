@@ -158,6 +158,8 @@ litellm_settings:
 |----------|----------|-------------|
 | `GROQ_API_KEY` | Yes* | Groq API key (free tier: 30K TPM, 500K TPD) |
 | `GEMINI_API_KEY` | Yes* | Google Gemini API key (free tier) |
+| `GEMINI_API_KEY_2` | No | Optional second Gemini key for same-order load balancing |
+| `GEMINI_API_KEY_3` | No | Optional third Gemini key for same-order load balancing |
 | `AZURE_AI_API_KEY` | Yes* | Azure AI API key (paid, S0 tier) |
 | `AZURE_AI_API_BASE` | Yes if Azure | Azure AI endpoint URL |
 | `LITELLM_MASTER_KEY` | Yes | Master key for admin access to the proxy |
@@ -184,17 +186,17 @@ litellm_settings:
 
 **How it works**:
 1. Pre-call checks filter deployments to lowest available `order` value (highest priority)
-2. Simple-shuffle randomly picks among deployments with the same order
+2. Simple-shuffle randomly picks among deployments with the same order, which lets Gemini spread requests across multiple keys
 3. On failure, provider is cooled down and next retry uses next order value
 4. Fallbacks cascade through provider order, then cross-tier fallbacks
 
 **Provider Priority** (all tiers):
 1. Groq (order: 1) - Primary
-2. Gemini (order: 2) - First fallback
+2. Gemini (order: 2) - First fallback, load-balanced across configured Gemini keys
 3. Azure AI (order: 3) - Second fallback
 
 **Retries and cooldowns**:
-- `num_retries: 2` (allows 3 providers: initial + 2 retries)
+- `num_retries: 5` (enough to walk Groq, up to 3 Gemini keys, Azure AI, and Local in one group)
 - `cooldown_time: 60s`
 - `retry_after: 5s`
 - `timeout: 120s` per provider attempt

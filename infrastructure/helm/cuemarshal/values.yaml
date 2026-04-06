@@ -22,6 +22,8 @@ image:
 llm:
   groqApiKey: ""
   geminiApiKey: ""
+  geminiApiKey2: ""
+  geminiApiKey3: ""
   azureAiApiKey: ""
   azureAiApiBase: ""
 
