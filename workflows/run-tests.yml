@@ -25,7 +25,15 @@ jobs:
     runs-on: [self-hosted, opencode]
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git config --local http.extraHeader "Authorization: token ${GITHUB_TOKEN}"
+          git fetch origin "${GITHUB_REF_NAME}" --depth=1
+          git checkout FETCH_HEAD
 
       - name: Configure tester identity and credentials
         run: |

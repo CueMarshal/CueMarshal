@@ -18,9 +18,15 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0    # full history for blame data
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # Manual checkout — avoids external dependency on github.com for actions
+          git init
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git config --local http.extraHeader "Authorization: token ${GITHUB_TOKEN}"
+          git fetch origin "${GITHUB_REF_NAME}"    # full history for blame data
+          git checkout FETCH_HEAD
 
       - name: Validate Sonar configuration
         run: |
@@ -37,50 +43,65 @@ jobs:
       - name: Install dependencies and run tests with coverage
         if: env.SONAR_CONFIGURED == 'true'
         run: |
-          echo "=== Installing MCP server dependencies ==="
-          cd services/mcp-servers
-          npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
-          echo ""
-
-          echo "=== Running MCP server tests with coverage ==="
-          npx jest --coverage --coverageDirectory=coverage --passWithNoTests || true
-          cd ../..
-
-          echo ""
-          echo "=== Installing Conductor dependencies ==="
-          cd services/conductor
-          npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
-          echo ""
-
-          echo "=== Running Conductor tests with coverage ==="
-          npx jest --coverage --coverageDirectory=coverage --passWithNoTests || true
-          cd ../..
-
-          echo ""
-          echo "=== Coverage reports ==="
-          for f in services/mcp-servers/coverage/lcov.info services/conductor/coverage/lcov.info; do
-            if [ -f "$f" ]; then
-              echo "  Found: $f ($(wc -l < "$f") lines)"
-            else
-              echo "  Missing: $f"
+          # Discover and run test suites for each project subdirectory that has one
+          TEST_DIRS="services/mcp-servers services/conductor ."
+          for dir in ${TEST_DIRS}; do
+            if [ -f "${dir}/package.json" ] && [ "${dir}" != "." ]; then
+              echo "=== Installing dependencies: ${dir} ==="
+              (cd "${dir}" && npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts) || true
+              echo ""
+              echo "=== Running tests: ${dir} ==="
+              (cd "${dir}" && npx jest --coverage --coverageDirectory=coverage --passWithNoTests 2>/dev/null) || true
+              echo ""
             fi
           done
+
+          # Fallback: root-level package.json (typical for imported projects)
+          if [ -f "package.json" ] && [ ! -d "services/mcp-servers" ]; then
+            echo "=== Installing root dependencies ==="
+            npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts || true
+            echo ""
+            echo "=== Running root tests ==="
+            npx jest --coverage --coverageDirectory=coverage --passWithNoTests 2>/dev/null || true
+            echo ""
+          fi
+
+          echo "=== Coverage reports ==="
+          find . -name "lcov.info" -not -path "*/node_modules/*" 2>/dev/null | while read -r f; do
+            echo "  Found: $f ($(wc -l < "$f") lines)"
+          done || echo "  No coverage reports found"
 
       - name: Run SonarQube Scanner
         if: env.SONAR_CONFIGURED == 'true'
         run: |
-          sonar-scanner \
-            -Dsonar.projectKey="${SONAR_PROJECT_KEY:-cuemarshal}" \
-            -Dsonar.host.url="${SONAR_URL}" \
-            -Dsonar.token="${SONAR_TOKEN}" \
-            -Dsonar.sources=. \
-            -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/*.test.*,**/coverage/**,**/__tests__/**" \
-            -Dsonar.tests=. \
-            -Dsonar.test.inclusions="**/*.test.ts,**/*.spec.ts,**/__tests__/**" \
-            -Dsonar.javascript.lcov.reportPaths=services/mcp-servers/coverage/lcov.info,services/conductor/coverage/lcov.info \
-            -Dsonar.typescript.lcov.reportPaths=services/mcp-servers/coverage/lcov.info,services/conductor/coverage/lcov.info \
-            -Dsonar.python.version=3.12 \
-            -Dsonar.typescript.tsconfigPaths=services/mcp-servers/tsconfig.json,services/conductor/tsconfig.json,mobile/tsconfig.json
+          # Build scanner args — always required
+          SONAR_ARGS="-Dsonar.projectKey=${SONAR_PROJECT_KEY:-cuemarshal}"
+          SONAR_ARGS="${SONAR_ARGS} -Dsonar.host.url=${SONAR_URL}"
+          SONAR_ARGS="${SONAR_ARGS} -Dsonar.token=${SONAR_TOKEN}"
+
+          # Only set sources/exclusions/tests if no sonar-project.properties exists
+          if [ ! -f "sonar-project.properties" ]; then
+            SONAR_ARGS="${SONAR_ARGS} -Dsonar.sources=."
+            SONAR_ARGS="${SONAR_ARGS} -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/build/**,**/*.test.*,**/coverage/**,**/__tests__/**"
+            SONAR_ARGS="${SONAR_ARGS} -Dsonar.tests=."
+            SONAR_ARGS="${SONAR_ARGS} -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/__tests__/**"
+          fi
+
+          # Dynamically discover coverage reports
+          LCOV_PATHS=$(find . -name "lcov.info" -not -path "*/node_modules/*" 2>/dev/null | paste -sd, -)
+          if [ -n "${LCOV_PATHS}" ]; then
+            SONAR_ARGS="${SONAR_ARGS} -Dsonar.javascript.lcov.reportPaths=${LCOV_PATHS}"
+            SONAR_ARGS="${SONAR_ARGS} -Dsonar.typescript.lcov.reportPaths=${LCOV_PATHS}"
+          fi
+
+          # Dynamically discover tsconfig files
+          TSCONFIG_PATHS=$(find . -name "tsconfig.json" -not -path "*/node_modules/*" -maxdepth 3 2>/dev/null | paste -sd, -)
+          if [ -n "${TSCONFIG_PATHS}" ]; then
+            SONAR_ARGS="${SONAR_ARGS} -Dsonar.typescript.tsconfigPaths=${TSCONFIG_PATHS}"
+          fi
+
+          echo "Running: sonar-scanner ${SONAR_ARGS}"
+          sonar-scanner ${SONAR_ARGS}
 
           echo "SonarQube analysis submitted"
 
