@@ -30,7 +30,7 @@ CLONE_URL=""
 REPO_NAME=""
 ORG_NAME=""
 NO_PUSH=false
-GITEA_EXTERNAL_URL="${GITEA_EXTERNAL_URL:-http://localhost:3300}"
+GITEA_EXTERNAL_URL="${GITEA_EXTERNAL_URL:-http://localhost:8180/gitea}"
 TEMPLATE_REPO_URL="${TEMPLATE_REPO_URL:-https://raw.githubusercontent.com/CueMarshal/CueMarshal/main}"
 
 usage() {

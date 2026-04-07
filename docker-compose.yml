@@ -96,7 +96,6 @@ services:
       - gitea-data:/data
       - ./infrastructure/gitea/app.ini:/etc/templates/app.ini:ro
     ports:
-      - "3300:3000"
       - "2223:22"
     entrypoint:
       - /bin/sh
