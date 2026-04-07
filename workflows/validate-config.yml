@@ -38,6 +38,7 @@ jobs:
       - name: Run environment validation script
         run: |
           echo "Running environment configuration validation..."
+          chmod +x ./scripts/validate-env.sh
           ./scripts/validate-env.sh
           
       - name: Check for placeholder values in .env.example
