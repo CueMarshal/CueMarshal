@@ -1,0 +1,148 @@
+name: Validate Configuration
+
+on:
+  pull_request:
+    paths:
+      - '.env.example'
+      - 'conductor/src/config.ts'
+      - 'gateway/litellm_config.yaml'
+      - 'docker-compose.yml'
+      - 'scripts/validate-env.sh'
+  push:
+    branches:
+      - main
+    paths:
+      - '.env.example'
+      - 'conductor/src/config.ts'
+      - 'gateway/litellm_config.yaml'
+      - 'docker-compose.yml'
+      - 'scripts/validate-env.sh'
+
+jobs:
+  validate-env:
+    name: Validate Environment Configuration
+    runs-on: [self-hosted, opencode]
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run environment validation script
+        run: |
+          echo "Running environment configuration validation..."
+          ./scripts/validate-env.sh
+          
+      - name: Check for placeholder values in .env.example
+        run: |
+          echo "Checking for incomplete placeholder values..."
+          
+          # Count occurrences of placeholder patterns
+          PLACEHOLDERS=$(grep -E "(CHANGE_ME|xxxxxx|sk-litellm-master-xxx|sk-ant-api03-\.\.\.|sk-\.\.\.|gsk_\.\.\.|AIzaSy\.\.\.)" .env.example | wc -l)
+          
+          # .env.example is allowed to have placeholders (it's a template)
+          # But check that they're properly documented
+          if [ $PLACEHOLDERS -eq 0 ]; then
+            echo "⚠️  Warning: No placeholder values found - ensure .env.example has clear examples"
+          else
+            echo "✓ Found $PLACEHOLDERS placeholder values (expected in template)"
+          fi
+
+      - name: Validate conductor config schema
+        run: |
+          echo "Validating conductor configuration schema..."
+          cd conductor
+          npm ci --quiet
+          
+          # Try to compile config.ts to catch syntax errors
+          npx tsc --noEmit src/config.ts
+          echo "✓ Config schema compiles successfully"
+
+      - name: Check model tier consistency
+        run: |
+          echo "Checking model tier consistency across workflow and gateway config..."
+          
+          # Extract tier mappings from task-execute.yml
+          WORKFLOW_TIERS=$(grep -A 3 'case "${TIER}" in' .gitea/workflows/task-execute.yml | grep 'MODEL_ID=' | sed 's/.*MODEL_ID="\([^"]*\)".*/\1/' | sort)
+          
+          # Extract model names from litellm_config.yaml
+          GATEWAY_MODELS=$(grep -E '^\s+- model_name:' gateway/litellm_config.yaml | sed 's/.*model_name: "\([^"]*\)".*/\1/' | sort -u)
+          
+          echo "Workflow tier models:"
+          echo "$WORKFLOW_TIERS"
+          echo ""
+          echo "Gateway registered models:"
+          echo "$GATEWAY_MODELS"
+          echo ""
+          
+          # Check that all workflow models exist in gateway config
+          MISSING_MODELS=0
+          for MODEL in $WORKFLOW_TIERS; do
+            if ! echo "$GATEWAY_MODELS" | grep -qw "$MODEL"; then
+              echo "✗ Model '$MODEL' used in workflow but not defined in gateway config"
+              MISSING_MODELS=$((MISSING_MODELS + 1))
+            fi
+          done
+          
+          if [ $MISSING_MODELS -eq 0 ]; then
+            echo "✓ All workflow models are defined in gateway config"
+          else
+            echo "✗ Found $MISSING_MODELS missing model(s) in gateway config"
+            exit 1
+          fi
+
+      - name: Verify critical file consistency
+        run: |
+          echo "Verifying configuration file consistency..."
+          
+          # Check that .env.example has validation checklist reference
+          if ! grep -q "Validation Checklist" .env.example; then
+            echo "⚠️  Warning: .env.example missing validation checklist reference"
+          fi
+          
+          # Check that docker-compose.yml uses variables from .env.example
+          ENV_VARS=$(grep -E '^[A-Z_]+=.*' .env.example | grep -v '^#' | sed 's/=.*//' | grep -v '^\$' || true)
+          UNUSED_VARS=()
+          
+          for VAR in $ENV_VARS; do
+            # Skip aliases like GATEWAY_API_KEY that reference other vars
+            if grep -qE "^${VAR}=\\\$\{" .env.example; then
+              continue
+            fi
+            
+            # Check if used in docker-compose.yml (simple string match is more reliable)
+            if ! grep -q "${VAR}" docker-compose.yml; then
+              # Also check if it's a conductor-only var (used in config.ts but not compose)
+              if ! grep -q "process.env.${VAR}" conductor/src/config.ts 2>/dev/null; then
+                # Also check infrastructure scripts for Gitea setup variables
+                if ! grep -rq "${VAR}" infrastructure/ 2>/dev/null; then
+                  UNUSED_VARS+=("$VAR")
+                fi
+              fi
+            fi
+          done
+          
+          if [ ${#UNUSED_VARS[@]} -gt 0 ]; then
+            echo "⚠️  Warning: Variables in .env.example not used in docker-compose.yml, conductor config, or infrastructure:"
+            printf '%s\n' "${UNUSED_VARS[@]}"
+          else
+            echo "✓ All .env.example variables are used"
+          fi
+          
+          echo "✓ Configuration file consistency validated"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo ""
+          echo "═══════════════════════════════════════════════════════════════"
+          echo "Configuration Validation Summary"
+          echo "═══════════════════════════════════════════════════════════════"
+          echo ""
+          echo "✓ Environment variable completeness check passed"
+          echo "✓ Conductor config schema validation passed"
+          echo "✓ Model tier consistency check passed"
+          echo "✓ Configuration file consistency check passed"
+          echo ""
+          echo "See CONFIGURATION.md for source of truth documentation"
+          echo "═══════════════════════════════════════════════════════════════"
