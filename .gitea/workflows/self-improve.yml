@@ -1,0 +1,209 @@
+name: Self-Improvement
+
+on:
+  workflow_dispatch:
+    inputs:
+      correlation_id:
+        description: 'Correlation ID for tracing'
+        required: false
+        default: ''
+
+env:
+  GITEA_URL: ${{ secrets.SCM_URL }}
+  GITEA_TOKEN: ${{ secrets.SCM_TOKEN }}
+  OPENAI_API_KEY: ${{ secrets.GATEWAY_API_KEY }}
+  LOCAL_ENDPOINT: http://127.0.0.1:4101
+
+jobs:
+  discover:
+    runs-on: [self-hosted, opencode]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set correlation ID
+        run: |
+          CORR_ID="${{ github.event.inputs.correlation_id }}"
+          if [ -z "$CORR_ID" ]; then
+            CORR_ID="si-$(date +%s)000-$(uuidgen 2>/dev/null || echo $$)"
+          fi
+          echo "CORRELATION_ID=$CORR_ID" >> $GITHUB_ENV
+          echo "event=self_improve.workflow_started correlationId=$CORR_ID timestamp=$(date -Iseconds)"
+
+      - name: Configure self-improvement identity and credentials
+        run: |
+          git config user.name "agent-architect"
+          git config user.email "architect@cuemarshal.local"
+          GITEA_TOKEN="${{ secrets.SCM_TOKEN_ARCHITECT }}"
+          if [ -z "${GITEA_TOKEN}" ]; then
+            GITEA_TOKEN="${{ secrets.SCM_TOKEN }}"
+            echo "WARNING: SCM_TOKEN_ARCHITECT not found, using legacy SCM_TOKEN"
+          fi
+          echo "GITEA_TOKEN=${GITEA_TOKEN}" >> $GITHUB_ENV
+
+      - name: Install scanner dependencies
+        run: |
+          which jq || (echo "jq is required but not installed" && exit 1)
+
+      - name: Run improvement scanners
+        env:
+          SONAR_URL: ${{ secrets.SONAR_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+        run: |
+          echo "Running deterministic scanners..."
+          timeout 10m bash scripts/scanners/run-all-scanners.sh || {
+            exit_code=$?
+            if [ $exit_code -eq 124 ]; then
+              echo "ERROR: Scanners timed out after 10 minutes"
+            else
+              echo "ERROR: Scanners failed with exit code $exit_code"
+            fi
+            exit 1
+          }
+          
+          if [ ! -f improvement-findings.json ]; then
+            echo "ERROR: Scanner output not generated"
+            exit 1
+          fi
+          
+          echo ""
+          echo "Scanner Results Summary:"
+          jq '.summary' improvement-findings.json
+
+      - name: Configure architect agent
+        run: |
+          cp /agents/architect/opencode-selfimprove.json ./opencode.json
+          cp -r /agents/architect/.opencode ./.opencode 2>/dev/null || true
+          
+          if command -v jq &>/dev/null && [ -f opencode.json ]; then
+            jq --arg url "$GITEA_URL" --arg token "$GITEA_TOKEN" \
+              '.mcp.gitea.environment.GITEA_URL = $url | .mcp.gitea.environment.GITEA_TOKEN = $token' \
+              opencode.json > opencode.tmp && mv opencode.tmp opencode.json
+            echo "Patched MCP GITEA_URL and GITEA_TOKEN in opencode config"
+          fi
+
+      - name: Debug environment
+        run: |
+          if [ -n "$GITEA_TOKEN" ]; then
+            echo "GITEA_TOKEN is set"
+          else
+            echo "GITEA_TOKEN is NOT set"
+          fi
+          echo "GITEA_URL: $GITEA_URL"
+          if curl -sf -H "Authorization: token $GITEA_TOKEN" "$GITEA_URL/api/v1/user" -o /dev/null; then
+            echo "GITEA_TOKEN appears to be valid"
+          else
+            echo "TOKEN INVALID"
+          fi
+
+      - name: Ensure required labels exist
+        run: |
+          REPO_FULL="${{ github.repository }}"
+          REPO_OWNER="${REPO_FULL%%/*}"
+          REPO_NAME="${REPO_FULL##*/}"
+          
+          declare -A LABELS=(
+            ["self-improvement"]="#0075ca"
+            ["complexity:simple"]="#2ea44f"
+            ["complexity:standard"]="#fef2c0"
+            ["complexity:complex"]="#e4e669"
+            ["source:sonar"]="#fbca04"
+          )
+          
+          EXISTING=$(curl -sf -H "Authorization: token $GITEA_TOKEN" \
+            "$GITEA_URL/api/v1/repos/$REPO_OWNER/$REPO_NAME/labels?limit=50" | \
+            jq -r '.[].name' 2>/dev/null || echo "")
+          
+          for LABEL in "${!LABELS[@]}"; do
+            if echo "$EXISTING" | grep -qx "$LABEL"; then
+              echo "Label '$LABEL' already exists"
+            else
+              echo "Creating label '$LABEL'..."
+              curl -sf -X POST \
+                -H "Authorization: token $GITEA_TOKEN" \
+                -H "Content-Type: application/json" \
+                "$GITEA_URL/api/v1/repos/$REPO_OWNER/$REPO_NAME/labels" \
+                -d "{\"name\":\"$LABEL\",\"color\":\"${LABELS[$LABEL]}\"}" > /dev/null && \
+                echo "  Created '$LABEL'" || echo "  WARNING: Failed to create '$LABEL'"
+            fi
+          done
+
+      - name: Pre-filter top findings
+        run: |
+          MAX="3"
+          TOP_N="10"
+          echo "MAX=$MAX" >> $GITHUB_ENV
+          
+          FINDINGS_COUNT=$(jq -r '.summary.total_findings' improvement-findings.json)
+          
+          if [ "$FINDINGS_COUNT" -eq 0 ]; then
+            echo "No improvement opportunities found by scanners."
+            echo "SKIP_PRIORITIZE=true" >> $GITHUB_ENV
+            exit 0
+          fi
+          
+          echo "Found $FINDINGS_COUNT total findings. Extracting top $TOP_N by priority_score..."
+          
+          REPO_FULL="${{ github.repository }}"
+          REPO_OWNER="${REPO_FULL%%/*}"
+          REPO_NAME="${REPO_FULL##*/}"
+          echo "REPO_OWNER=$REPO_OWNER" >> $GITHUB_ENV
+          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
+          
+          jq --argjson n "$TOP_N" '{
+            summary: .summary,
+            repository: .repository,
+            findings: [.findings | sort_by(-.priority_score) | .[:$n] | .[] | {
+              id, source, category, severity, priority_score,
+              title, description, location, suggested_approach,
+              effort_estimate, tags, metadata
+            }]
+          }' improvement-findings.json > top-findings.json
+          
+          echo "Top findings file size: $(wc -c < top-findings.json) bytes"
+          echo "Findings included: $(jq '.findings | length' top-findings.json)"
+
+      - name: Prioritize and create improvement issues
+        if: env.SKIP_PRIORITIZE != 'true'
+        run: |
+          echo "event=self_improve.opencode_executed correlationId=${{ env.CORRELATION_ID }}"
+          
+          echo "Creating up to $MAX issues for $REPO_OWNER/$REPO_NAME..."
+          
+          opencode run --print-logs --format json "Correlation ID for this run: ${{ env.CORRELATION_ID }}
+
+          You are analyzing improvement opportunities for the repository ${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}.
+
+          The top priority findings from a deterministic scanner are in 'top-findings.json'. Read that file.
+
+          Your task:
+          1. Read top-findings.json
+          2. Select up to ${{ env.MAX }} high-value improvements that:
+             - Have clear, actionable steps
+             - Provide meaningful value (priority_score > 50, severity high or medium)
+             - Are appropriate for automated implementation
+             - Do not conflict with each other
+             - Prefer categories: technical_debt, testing, dependencies, code_quality
+          3. For each selected improvement, call gitea_create_issue with:
+             - owner: '${{ env.REPO_OWNER }}'
+             - repo: '${{ env.REPO_NAME }}'
+             - title: from the finding's 'title' field
+             - body: combine 'description', 'suggested_approach', and 'location' info. Reference the scanner source and priority_score.
+             - labelNames: ['self-improvement', 'role:developer'] plus a complexity label based on effort_estimate (e.g. 'complexity:simple', 'complexity:standard')
+
+          For sonarqube-sourced findings, include metadata.sonar_rule in the body and add 'source:sonar' to labelNames.
+
+          IMPORTANT:
+          - Create a MAXIMUM of ${{ env.MAX }} issues
+          - Always pass owner and repo as shown above
+          - Use labelNames (not labels) for label names
+          - Only use the gitea_create_issue MCP tool
+          - Skip findings that are too vague or would require significant architectural changes
+          " --model "litellm/tier1"
+
+      - name: Log workflow completion
+        if: always()
+        run: |
+          echo "event=self_improve.cycle_completed correlationId=${{ env.CORRELATION_ID }} status=${{ job.status }}"
