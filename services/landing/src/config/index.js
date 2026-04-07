@@ -21,6 +21,7 @@ export const config = {
     redirectUri: `${window.location.origin}/oauth/callback`,
     scopes: [
       'read:user',
+      'read:organization',
       'read:repository',
       'write:repository',
       'read:issue',

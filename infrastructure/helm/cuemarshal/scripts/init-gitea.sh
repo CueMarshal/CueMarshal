@@ -13,11 +13,7 @@ SONAR_ADMIN_PASSWORD="${SONAR_ADMIN_PASSWORD:-${ADMIN_PASSWORD}}"
 SONAR_PROJECT_KEY="${SONAR_PROJECT_KEY:-cuemarshal}"
 TOKEN_DIR="/tokens"
 MARKER="${TOKEN_DIR}/.initialized"
-
-if [ -f "${MARKER}" ]; then
-    echo "Already initialized. Skipping."
-    exit 0
-fi
+OAUTH_FINGERPRINT_FILE="${TOKEN_DIR}/oauth2_app_fingerprint"
 
 if [ -z "${ADMIN_PASSWORD}" ]; then
     echo "ERROR: GITEA_ADMIN_PASSWORD must be set"
@@ -92,6 +88,22 @@ generate_admin_token() {
     fi
     echo "${ADMIN_TOKEN}" > "${TOKEN_DIR}/admin_token"
     echo "  Admin token generated"
+}
+
+ensure_admin_token() {
+    if [ -f "${TOKEN_DIR}/admin_token" ]; then
+        ADMIN_TOKEN=$(cat "${TOKEN_DIR}/admin_token")
+        HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: token ${ADMIN_TOKEN}" \
+            "${GITEA_URL}/api/v1/user" 2>/dev/null || echo "000")
+
+        if [ "${HTTP_CODE}" = "200" ]; then
+            return 0
+        fi
+    fi
+
+    verify_admin_user
+    generate_admin_token
 }
 
 create_bot_user() {
@@ -442,20 +454,62 @@ seed_repo_secrets() {
 create_oauth2_app() {
     echo "[14/17] Creating OAuth2 application for mobile app & web..."
     ADMIN_TOKEN=$(cat "${TOKEN_DIR}/admin_token")
+    OAUTH_SCOPE_SET="read:user read:organization read:repository write:repository read:issue write:issue"
 
-    # Determine the web redirect URI based on external URL (not internal cluster URL)
-    WEB_REDIRECT_URI="${GITEA_EXTERNAL_URL:-${GITEA_URL}}/oauth/callback"
+    # Determine the browser callback based on the public web URL, not the
+    # internal service hostname. Fall back for older environments that only set
+    # GITEA_EXTERNAL_URL.
+    WEB_BASE_URL="${CUEMARSHAL_PUBLIC_URL:-${GITEA_EXTERNAL_URL:-${GITEA_URL}}}"
+    WEB_BASE_URL="${WEB_BASE_URL%/}"
+    WEB_REDIRECT_URI="${WEB_BASE_URL}/oauth/callback"
+    EXPECTED_FINGERPRINT="cuemarshal://oauth|${WEB_REDIRECT_URI}|${OAUTH_SCOPE_SET}"
+    STORED_FINGERPRINT=""
+    if [ -f "${OAUTH_FINGERPRINT_FILE}" ]; then
+        STORED_FINGERPRINT=$(cat "${OAUTH_FINGERPRINT_FILE}")
+    fi
 
     # Check if the OAuth2 app already exists
-    EXISTING=$(curl -sf \
+    APPS_RESPONSE=$(curl -sf \
         -H "Authorization: token ${ADMIN_TOKEN}" \
-        "${GITEA_URL}/api/v1/user/applications/oauth2" 2>/dev/null | \
-        sed -n 's/.*"client_id":"\([^"]*\)".*"name":"CueMarshal".*/\1/p')
+        "${GITEA_URL}/api/v1/user/applications/oauth2" 2>/dev/null)
+    APP_RECORD=$(printf '%s' "${APPS_RESPONSE}" | sed 's/},{/}\
+{/g' | grep '"name":"CueMarshal"' | head -n 1 || true)
+    EXISTING_ID=$(printf '%s' "${APP_RECORD}" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+    EXISTING_CLIENT_ID=$(printf '%s' "${APP_RECORD}" | sed -n 's/.*"client_id":"\([^"]*\)".*/\1/p')
 
-    if [ -n "${EXISTING}" ]; then
-        CLIENT_ID="${EXISTING}"
-        echo "  OAuth2 application already exists (Client ID: ${CLIENT_ID})"
-    else
+    if [ -n "${EXISTING_ID}" ]; then
+        CLIENT_ID="${EXISTING_CLIENT_ID}"
+
+        if [ "${STORED_FINGERPRINT}" != "${EXPECTED_FINGERPRINT}" ]; then
+            echo "  Recreating OAuth2 application to apply updated callback/scopes..."
+            curl -sf -X DELETE \
+                -H "Authorization: token ${ADMIN_TOKEN}" \
+                "${GITEA_URL}/api/v1/user/applications/oauth2/${EXISTING_ID}" >/dev/null 2>&1
+            EXISTING_ID=""
+            CLIENT_ID=""
+        elif printf '%s' "${APP_RECORD}" | grep -F '"cuemarshal://oauth"' >/dev/null 2>&1 && \
+             printf '%s' "${APP_RECORD}" | grep -F "\"${WEB_REDIRECT_URI}\"" >/dev/null 2>&1; then
+            echo "  OAuth2 application already exists (Client ID: ${CLIENT_ID})"
+        else
+            echo "  Updating OAuth2 application redirect URIs..."
+            OAUTH_RESPONSE=$(curl -sf -X PATCH \
+                -H "Authorization: token ${ADMIN_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "${GITEA_URL}/api/v1/user/applications/oauth2/${EXISTING_ID}" \
+                -d "{
+                    \"name\": \"CueMarshal\",
+                    \"redirect_uris\": [\"cuemarshal://oauth\", \"${WEB_REDIRECT_URI}\"],
+                    \"confidential_client\": false
+                }" 2>/dev/null)
+
+            UPDATED_CLIENT_ID=$(printf '%s' "${OAUTH_RESPONSE}" | sed -n 's/.*"client_id":"\([^"]*\)".*/\1/p')
+            if [ -n "${UPDATED_CLIENT_ID}" ]; then
+                CLIENT_ID="${UPDATED_CLIENT_ID}"
+            fi
+        fi
+    fi
+
+    if [ -z "${EXISTING_ID}" ]; then
         OAUTH_RESPONSE=$(curl -sf -X POST \
             -H "Authorization: token ${ADMIN_TOKEN}" \
             -H "Content-Type: application/json" \
@@ -471,6 +525,7 @@ create_oauth2_app() {
 
     if [ -n "${CLIENT_ID}" ]; then
         echo "${CLIENT_ID}" > "${TOKEN_DIR}/oauth2_client_id"
+        echo "${EXPECTED_FINGERPRINT}" > "${OAUTH_FINGERPRINT_FILE}"
         echo "  OAuth2 application configured (Mobile + Web)"
         echo "    - Mobile: cuemarshal://oauth"
         echo "    - Web: ${WEB_REDIRECT_URI}"
@@ -649,6 +704,15 @@ configure_google_oauth() {
         echo "  WARNING: Failed to configure Google OAuth"
     fi
 }
+
+if [ -f "${MARKER}" ]; then
+    echo "Already initialized. Refreshing auth configuration..."
+    wait_for_gitea_ready
+    ensure_admin_token
+    create_oauth2_app
+    configure_google_oauth
+    exit 0
+fi
 
 # Main execution
 wait_for_gitea_ready

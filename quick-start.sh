@@ -18,8 +18,9 @@ GITEA_URL="http://localhost:3300"
 GITEA_DOMAIN="localhost"
 GITEA_SSH_DOMAIN="localhost"
 GITEA_SSH_PORT="2223"
-CONDUCTOR_URL="http://localhost:8180/api"
-NGINX_HEALTH_URL="http://localhost:8180/health"
+CUEMARSHAL_PUBLIC_URL="http://localhost:8180"
+CONDUCTOR_URL="${CUEMARSHAL_PUBLIC_URL}/api"
+NGINX_HEALTH_URL="${CUEMARSHAL_PUBLIC_URL}/health"
 OLLAMA_BASE_URL="http://host.docker.internal:11434"
 
 env_value() {
@@ -35,6 +36,7 @@ load_runtime_config() {
   local domain
   local ssh_domain
   local ssh_port
+  local public_url
   local ollama_base_url
 
   root_url=$(env_value "GITEA_ROOT_URL")
@@ -59,6 +61,13 @@ load_runtime_config() {
   if [ -n "${ssh_port}" ]; then
     GITEA_SSH_PORT="${ssh_port}"
   fi
+
+  public_url=$(env_value "CUEMARSHAL_PUBLIC_URL")
+  if [ -n "${public_url}" ]; then
+    CUEMARSHAL_PUBLIC_URL="${public_url%/}"
+  fi
+  CONDUCTOR_URL="${CUEMARSHAL_PUBLIC_URL}/api"
+  NGINX_HEALTH_URL="${CUEMARSHAL_PUBLIC_URL}/health"
 
   ollama_base_url=$(env_value "OLLAMA_BASE_URL")
   if [ -n "${ollama_base_url}" ]; then
@@ -326,6 +335,7 @@ repair_gitea_volume
 # ── Start services ────────────────────────────────────────────────────────────
 echo ""
 echo "Starting services..."
+docker compose rm -sf init-gitea >/dev/null 2>&1 || true
 docker compose up -d
 
 # ── Wait for Gitea init ───────────────────────────────────────────────────────
@@ -376,7 +386,7 @@ echo "  Username:  cuemarshal-admin"
 echo "  Password:  ${ADMIN_PASSWORD}"
 echo ""
 echo "  Conductor: ${CONDUCTOR_URL}"
-echo "  Nginx:     http://localhost:8180"
+echo "  Nginx:     ${CUEMARSHAL_PUBLIC_URL}"
 echo ""
 echo "Next steps:"
 echo "  1. Log in to Gitea at ${GITEA_URL}"

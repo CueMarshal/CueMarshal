@@ -67,7 +67,7 @@ Gitea OAuth2 authentication flow.
 **OAuth2 Configuration:**
 - Authorization URL: `{GITEA_URL}/login/oauth/authorize`
 - Token URL: `{GITEA_URL}/login/oauth/access_token`
-- Scopes: `read:user`, `read:repository`, `write:repository`, `read:issue`, `write:issue`
+- Scopes: `read:user`, `read:organization`, `read:repository`, `write:repository`, `read:issue`, `write:issue`
 - Client ID/Secret: Registered as OAuth2 application in Gitea
 
 ### Chat Screen (`(tabs)/chat.tsx`)

@@ -44,6 +44,7 @@ export const config = {
     redirectUri: extra.oauth2RedirectUri || 'cuemarshal://oauth',
     scopes: [
       'read:user',
+      'read:organization',
       'read:repository',
       'write:repository',
       'read:issue',

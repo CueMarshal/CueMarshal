@@ -130,6 +130,7 @@ The app uses the OAuth 2.0 Authorization Code flow with PKCE (Proof Key for Code
 The app requests the following OAuth2 scopes:
 
 - `read:user` - Read user profile information
+- `read:organization` - Read organization and org repository membership data
 - `read:repository` - Read repository data
 - `write:repository` - Create and modify repositories
 - `read:issue` - Read issues

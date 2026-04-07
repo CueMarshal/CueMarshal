@@ -508,6 +508,7 @@ services:
     entrypoint: ["/bin/sh", "/init/init-gitea.sh"]
     environment:
       - GITEA_URL=http://gitea:3000
+      - CUEMARSHAL_PUBLIC_URL=${CUEMARSHAL_PUBLIC_URL:-http://localhost:8180}
       - GITEA_ADMIN_USER=${GITEA_ADMIN_USER:-cuemarshal-admin}
       - GITEA_ADMIN_PASSWORD=${GITEA_ADMIN_PASSWORD}
       - GITEA_ADMIN_EMAIL=${GITEA_ADMIN_EMAIL:-admin@cuemarshal.local}

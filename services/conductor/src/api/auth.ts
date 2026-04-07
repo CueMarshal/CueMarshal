@@ -19,21 +19,43 @@ import { config } from "../config.js";
 
 const router = Router();
 
-// ---------------------------------------------------------------------------
-// Cached OAuth2 client ID (read from filesystem, rarely changes)
-// ---------------------------------------------------------------------------
-let _cachedClientId: string | null = null;
-
 async function getOAuth2ClientId(): Promise<string | null> {
-  if (_cachedClientId) return _cachedClientId;
   try {
     const raw = await readFile("/tokens/oauth2_client_id", "utf-8");
-    _cachedClientId = raw.trim();
-    return _cachedClientId;
+    return raw.trim();
   } catch {
     logger.warn("BFF auth: could not read /tokens/oauth2_client_id");
     return null;
   }
+}
+
+function getHeaderValue(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) {
+    return value[0]?.split(",")[0]?.trim() || null;
+  }
+
+  if (typeof value === "string") {
+    return value.split(",")[0]?.trim() || null;
+  }
+
+  return null;
+}
+
+function getExternalBase(req: Request): string {
+  const proto = getHeaderValue(req.headers["x-forwarded-proto"]) || req.protocol || "http";
+  const forwardedHost = getHeaderValue(req.headers["x-forwarded-host"]);
+  const forwardedPort = getHeaderValue(req.headers["x-forwarded-port"]);
+  const requestHost = req.headers.host || "localhost";
+
+  let host = forwardedHost || requestHost;
+  if (forwardedPort && host && !host.includes(":")) {
+    const defaultPort = proto === "https" ? "443" : "80";
+    if (forwardedPort !== defaultPort) {
+      host = `${host}:${forwardedPort}`;
+    }
+  }
+
+  return `${proto}://${host}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +95,7 @@ router.get("/authorize", async (req: Request, res: Response) => {
     }
 
     const scopeString =
-      scopes || "read:user read:repository write:repository read:issue write:issue";
+      scopes || "read:user read:organization read:repository write:repository read:issue write:issue";
 
     const params = new URLSearchParams({
       client_id: clientId,
@@ -88,9 +110,7 @@ router.get("/authorize", async (req: Request, res: Response) => {
     // Build the authorization URL using the external-facing host
     // (the browser cannot reach internal K8s service names).
     // nginx proxies /login/* to Gitea, so we use the request's origin.
-    const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
-    const host = req.headers["x-forwarded-host"] || req.headers.host;
-    const externalBase = `${proto}://${host}`;
+    const externalBase = getExternalBase(req);
     const authorizeUrl = `${externalBase}/login/oauth/authorize?${params.toString()}`;
 
     res.json({ authorizeUrl });
@@ -137,9 +157,23 @@ router.post("/token", async (req: Request, res: Response) => {
       "cuemarshal-dev://", // Expo Go dev scheme
     ];
     if (config.nodeEnv !== "development") {
-      const isAllowed = ALLOWED_REDIRECT_PREFIXES.some((prefix) =>
+      const externalBase = getExternalBase(req);
+      let isAllowed = ALLOWED_REDIRECT_PREFIXES.some((prefix) =>
         (redirect_uri as string).startsWith(prefix)
       );
+
+      if (!isAllowed) {
+        try {
+          const redirectUrl = new URL(redirect_uri as string);
+          const externalUrl = new URL(externalBase);
+          isAllowed =
+            redirectUrl.origin === externalUrl.origin &&
+            redirectUrl.pathname === "/oauth/callback";
+        } catch {
+          isAllowed = false;
+        }
+      }
+
       if (!isAllowed) {
         logger.warn({ redirect_uri }, "BFF auth: rejected disallowed redirect_uri");
         res.status(400).json({ error: "redirect_uri not allowed" });
