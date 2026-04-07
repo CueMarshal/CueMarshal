@@ -670,6 +670,51 @@ router.post("/self-improve/resume", validateBearerToken, async (_req, res): Prom
 });
 
 /**
+ * GET /api/internal/tasks/active
+ * List active tasks across projects for conductor MCP tools
+ * PROTECTED: requires bearer token
+ */
+router.get("/tasks/active", validateBearerToken, async (req, res) => {
+  try {
+    const projectFilter = typeof req.query.project === "string" ? req.query.project : undefined;
+    const roleFilter = typeof req.query.role === "string" ? req.query.role : undefined;
+    const statusFilter = typeof req.query.status === "string" ? req.query.status : undefined;
+    const activeStatuses = new Set(["analyzing", "in_progress", "review"]);
+
+    const taskList = await db.query.tasks.findMany({
+      orderBy: (tasks, { desc }) => [desc(tasks.updatedAt)],
+    });
+
+    const filtered = taskList.filter((task) => {
+      const matchesStatus = statusFilter ? task.status === statusFilter : activeStatuses.has(task.status);
+      const matchesProject = projectFilter ? task.giteaRepo.toLowerCase().includes(projectFilter.toLowerCase()) : true;
+      const matchesRole = roleFilter ? task.agentRole === roleFilter : true;
+      return matchesStatus && matchesProject && matchesRole;
+    });
+
+    res.json({
+      tasks: filtered.map((task) => ({
+        id: task.id,
+        issue_id: task.giteaIssueId,
+        project: task.giteaRepo,
+        status: task.status,
+        agent_role: task.agentRole,
+        model_tier: task.modelTier,
+        branch_name: task.branchName,
+        pr_number: task.prNumber,
+        progress: task.progress,
+        progress_message: task.progressMessage,
+        updated_at: task.updatedAt,
+      })),
+      total: filtered.length,
+    });
+  } catch (error) {
+    logger.error({ error }, "Failed to list active tasks");
+    res.status(500).json({ error: "Failed to list active tasks" });
+  }
+});
+
+/**
  * POST /api/internal/tasks/:id/progress
  * Update task progress from runner
  * PROTECTED: requires bearer token

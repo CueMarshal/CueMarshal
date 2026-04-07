@@ -234,7 +234,7 @@ services:
     environment:
       - MCP_TRANSPORT=http
       - PORT=80
-      - CONDUCTOR_URL=${CONDUCTOR_URL}
+      - CONDUCTOR_URL=http://conductor
       - CONDUCTOR_SECRET=${CONDUCTOR_SECRET}
       - DATABASE_URL=${DATABASE_URL}
     depends_on:
@@ -263,7 +263,7 @@ services:
       - GATEWAY_URL=http://gateway
       - GATEWAY_API_KEY=${LITELLM_MASTER_KEY}
       - REDIS_URL=${REDIS_URL}
-      - CONDUCTOR_URL=${CONDUCTOR_URL}
+      - CONDUCTOR_URL=http://conductor
       - CONDUCTOR_SECRET=${CONDUCTOR_SECRET}
       - DATABASE_URL=${DATABASE_URL}
       - LOKI_URL=http://loki:3100
@@ -426,7 +426,7 @@ services:
       - RUNNER_NAME=cuemarshal-runner-1
       - RUNNER_LABELS=self-hosted,opencode
       - OPENAI_API_KEY=${GATEWAY_API_KEY}
-      - CONDUCTOR_URL=${CONDUCTOR_URL}
+      - CONDUCTOR_URL=http://conductor
       - CONDUCTOR_SECRET=${CONDUCTOR_SECRET}
       - DATABASE_URL=${DATABASE_URL}
       - SONAR_TOKEN=${SONAR_TOKEN}
@@ -468,7 +468,7 @@ services:
       - RUNNER_NAME=cuemarshal-runner-2
       - RUNNER_LABELS=self-hosted,opencode
       - OPENAI_API_KEY=${GATEWAY_API_KEY}
-      - CONDUCTOR_URL=${CONDUCTOR_URL}
+      - CONDUCTOR_URL=http://conductor
       - CONDUCTOR_SECRET=${CONDUCTOR_SECRET}
       - DATABASE_URL=${DATABASE_URL}
       - SONAR_TOKEN=${SONAR_TOKEN}

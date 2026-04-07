@@ -373,8 +373,9 @@ export class MCPRegistry {
    */
   private isConnectionError(error: unknown): boolean {
     if (!error) return false;
-    const msg = (error as Error).message?.toLowerCase() ?? "";
-    const name = (error as any).code?.toLowerCase() ?? "";
+    const msg = typeof (error as Error).message === "string" ? (error as Error).message.toLowerCase() : "";
+    const rawCode = (error as { code?: unknown }).code;
+    const name = typeof rawCode === "string" ? rawCode.toLowerCase() : "";
     return (
       msg.includes("econnrefused") ||
       msg.includes("econnreset") ||

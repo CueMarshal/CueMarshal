@@ -130,11 +130,18 @@ export default function ChatView({ currentSessionId = null, onSessionChange, onN
             });
           }
         },
-        onDone: () => {
+        onDone: (finalResponse) => {
           setMessages(prev => {
             const last = prev[prev.length - 1];
             if (last?.id !== streamingMsgId) return prev;
-            return [...prev.slice(0, -1), { ...last, isStreaming: false }];
+            return [...prev.slice(0, -1), {
+              ...last,
+              content: finalResponse?.content || last.content,
+              toolCalls: last.toolCalls?.length
+                ? last.toolCalls
+                : (finalResponse?.toolCallsSummary || last.toolCalls),
+              isStreaming: false,
+            }];
           });
         },
         onError: (err) => {

@@ -123,4 +123,8 @@ describe("MCPRegistry", () => {
       expect(val).toBe(false);
     }
   });
+
+  it("should ignore non-string error codes when checking connection failures", () => {
+    expect((registry as any).isConnectionError({ message: "validation failed", code: { status: 401 } })).toBe(false);
+  });
 });

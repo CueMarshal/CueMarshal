@@ -10,6 +10,7 @@ import { db } from "../db/client.js";
 import { chatSessions, chatMessages } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { logger } from "../utils/logger.js";
+import { extractDisplayTextFromContent, isLikelyJsonContent, parseInlineToolCallsFromContent, ParsedToolCall } from "./chat-tool-call-parser.js";
 
 
 const gateway = new OpenAI({
@@ -76,6 +77,91 @@ export interface StreamCallbacks {
 }
 
 export class ChatHandler {
+  private normalizeAssistantToolCalls<T extends { content?: string | null; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> | null } | undefined>(
+    assistantMessage: T,
+  ): T {
+    if (!assistantMessage || (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0)) {
+      return assistantMessage;
+    }
+
+    const inlineToolCalls = parseInlineToolCallsFromContent(assistantMessage.content);
+    if (inlineToolCalls.length === 0) {
+      return assistantMessage;
+    }
+
+    return {
+      ...assistantMessage,
+      content: null,
+      tool_calls: inlineToolCalls.map((toolCall) => ({
+        id: toolCall.id,
+        type: "function" as const,
+        function: { name: toolCall.name, arguments: toolCall.args },
+      })),
+    } as T;
+  }
+
+  private finalizeAssistantContent(
+    content: string | null | undefined,
+    toolCallsSummary: Array<{ tool: string; result_summary: string }>,
+  ): string {
+    const displayText = extractDisplayTextFromContent(content);
+    if (displayText?.trim()) {
+      return displayText;
+    }
+
+    const toolSummaryFallback = this.buildToolSummaryFallback(toolCallsSummary);
+    if (toolSummaryFallback) {
+      return toolSummaryFallback;
+    }
+
+    if (toolCallsSummary.some((summary) => summary.result_summary === "Failed")) {
+      return "I ran into a problem retrieving the latest data for that request.";
+    }
+
+    if (toolCallsSummary.length > 0) {
+      return "I completed the requested lookup, but I couldn't format the final reply cleanly.";
+    }
+
+    return "I apologize, I encountered an issue.";
+  }
+
+  private buildToolSummaryFallback(
+    toolCallsSummary: Array<{ tool: string; result_summary: string }>,
+  ): string | null {
+    const latestTaskSummary = [...toolCallsSummary]
+      .reverse()
+      .find((summary) => summary.tool === "task_list_active");
+    const latestProjectSummary = [...toolCallsSummary]
+      .reverse()
+      .find((summary) => summary.tool === "project_list");
+
+    const taskCount = latestTaskSummary ? this.extractSummaryCount(latestTaskSummary.result_summary) : null;
+    if (taskCount !== null) {
+      return taskCount === 0
+        ? "I'm not currently working on any active tasks."
+        : `I'm currently working on ${taskCount} active task${taskCount === 1 ? "" : "s"}.`;
+    }
+
+    const projectCount = latestProjectSummary ? this.extractSummaryCount(latestProjectSummary.result_summary) : null;
+    if (projectCount !== null) {
+      return projectCount === 0
+        ? "I'm not working on any projects right now."
+        : `I'm currently working on ${projectCount} project${projectCount === 1 ? "" : "s"}.`;
+    }
+
+    return null;
+  }
+
+  private extractSummaryCount(summary: string): number | null {
+    const match = summary.match(/^Found (\d+)/);
+    if (!match) {
+      return null;
+    }
+
+    const count = Number.parseInt(match[1], 10);
+    return Number.isNaN(count) ? null : count;
+  }
+
   /**
    * Process a chat message with MCP tool support
    */
@@ -122,7 +208,7 @@ export class ChatHandler {
       tool_choice: "auto",
     });
 
-    let assistantMessage = completion.choices[0]?.message;
+    let assistantMessage = this.normalizeAssistantToolCalls(completion.choices[0]?.message);
     const toolCallsSummary: Array<{ tool: string; result_summary: string }> = [];
 
     // Handle tool calls
@@ -187,11 +273,11 @@ export class ChatHandler {
         tool_choice: "auto",
       });
 
-      assistantMessage = followUp.choices[0]?.message;
+      assistantMessage = this.normalizeAssistantToolCalls(followUp.choices[0]?.message);
     }
 
     // Save assistant message
-    const finalContent = assistantMessage?.content || "I apologize, I encountered an issue.";
+    const finalContent = this.finalizeAssistantContent(assistantMessage?.content, toolCallsSummary);
     await db.insert(chatMessages).values({
       sessionId,
       role: "assistant",
@@ -254,13 +340,13 @@ export class ChatHandler {
         stream: true,
       });
 
-      const { chunkContent, toolCallEntries } = await this.collectStreamChunks(stream, callbacks);
-      fullContent += chunkContent;
+      const { assistantContent, toolCallEntries } = await this.collectStreamChunks(stream, callbacks);
+      fullContent += assistantContent;
       if (toolCallEntries.length === 0) return false;
 
       history.push({
         role: "assistant",
-        content: chunkContent || null,
+        content: assistantContent || null,
         tool_calls: toolCallEntries.map((tc) => ({
           id: tc.id,
           type: "function" as const,
@@ -278,7 +364,7 @@ export class ChatHandler {
         hasMoreToolCalls = await streamOnce();
       }
 
-      const finalContent = fullContent || "I apologize, I encountered an issue.";
+      const finalContent = fullContent || this.finalizeAssistantContent(undefined, toolCallsSummary);
       await db.insert(chatMessages).values({
         sessionId,
         role: "assistant",
@@ -339,7 +425,7 @@ export class ChatHandler {
 
   private accumulatePendingToolCall(
     tc: { index: number; id?: string; function?: { name?: string; arguments?: string } },
-    pendingToolCalls: Record<number, { id: string; name: string; args: string }>,
+    pendingToolCalls: Record<number, ParsedToolCall>,
   ): void {
     const idx = tc.index;
     if (!pendingToolCalls[idx]) pendingToolCalls[idx] = { id: tc.id || "", name: tc.function?.name || "", args: "" };
@@ -351,21 +437,62 @@ export class ChatHandler {
   private async collectStreamChunks(
     stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
     callbacks: StreamCallbacks,
-  ): Promise<{ chunkContent: string; toolCallEntries: Array<{ id: string; name: string; args: string }> }> {
-    const pendingToolCalls: Record<number, { id: string; name: string; args: string }> = {};
-    let chunkContent = "";
+  ): Promise<{ assistantContent: string; toolCallEntries: ParsedToolCall[] }> {
+    const pendingToolCalls: Record<number, ParsedToolCall> = {};
+    let rawContent = "";
+    let assistantContent = "";
+    let contentMode: "unknown" | "buffered" | "passthrough" = "unknown";
+
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta;
       if (!delta) continue;
+
       if (delta.content) {
-        chunkContent += delta.content;
-        callbacks.onChunk({ type: "text", delta: delta.content });
+        if (contentMode === "unknown") {
+          rawContent += delta.content;
+          const leadingContent = rawContent.trimStart();
+
+          if (leadingContent.length > 0) {
+            if (isLikelyJsonContent(leadingContent)) {
+              contentMode = "buffered";
+            } else {
+              contentMode = "passthrough";
+              assistantContent += rawContent;
+              callbacks.onChunk({ type: "text", delta: rawContent });
+              rawContent = "";
+            }
+          }
+        } else if (contentMode === "buffered") {
+          rawContent += delta.content;
+        } else {
+          assistantContent += delta.content;
+          callbacks.onChunk({ type: "text", delta: delta.content });
+        }
       }
+
       if (delta.tool_calls) {
         for (const tc of delta.tool_calls) this.accumulatePendingToolCall(tc, pendingToolCalls);
       }
     }
-    return { chunkContent, toolCallEntries: Object.values(pendingToolCalls) };
+
+    let toolCallEntries = Object.values(pendingToolCalls);
+
+    if (contentMode !== "passthrough" && rawContent) {
+      if (toolCallEntries.length === 0) {
+        const inlineToolCalls = parseInlineToolCallsFromContent(rawContent);
+        if (inlineToolCalls.length > 0) {
+          return { assistantContent, toolCallEntries: inlineToolCalls };
+        }
+      }
+
+      const normalizedText = extractDisplayTextFromContent(rawContent);
+      if (normalizedText?.trim()) {
+        assistantContent += normalizedText;
+        callbacks.onChunk({ type: "text", delta: normalizedText });
+      }
+    }
+
+    return { assistantContent, toolCallEntries };
   }
 
   private async dispatchToolCalls(
@@ -415,6 +542,10 @@ export class ChatHandler {
       }
       if (toolName === "gitea_create_pull_request") {
         return `Created PR #${parsed.number}`;
+      }
+      if (toolName === "task_list_active") {
+        const count = Array.isArray(parsed.tasks) ? parsed.tasks.length : parsed.total || 0;
+        return `Found ${count} active tasks`;
       }
       if (toolName.startsWith("gitea_list") || toolName.startsWith("project_list")) {
         const count = Array.isArray(parsed) ? parsed.length : parsed.total || 0;
