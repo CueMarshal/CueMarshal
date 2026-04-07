@@ -3,13 +3,20 @@ import sys
 from pathlib import Path
 
 
-OPTIONAL_GEMINI_MARKERS = {
-    '<<: *provider-gemini1': "GEMINI_API_KEY",
-    '<<: *provider-gemini2': "GEMINI_API_KEY_2",
-    '<<: *provider-gemini3': "GEMINI_API_KEY_3",
-    'api_key: "os.environ/GEMINI_API_KEY"': "GEMINI_API_KEY",
-    'api_key: "os.environ/GEMINI_API_KEY_2"': "GEMINI_API_KEY_2",
-    'api_key: "os.environ/GEMINI_API_KEY_3"': "GEMINI_API_KEY_3",
+OPTIONAL_PROVIDER_MARKERS = {
+    '<<: *provider-groq': ("GROQ_API_KEY",),
+    'api_key: "os.environ/GROQ_API_KEY"': ("GROQ_API_KEY",),
+    '<<: *provider-gemini1': ("GEMINI_API_KEY",),
+    '<<: *provider-gemini2': ("GEMINI_API_KEY_2",),
+    '<<: *provider-gemini3': ("GEMINI_API_KEY_3",),
+    'api_key: "os.environ/GEMINI_API_KEY"': ("GEMINI_API_KEY",),
+    'api_key: "os.environ/GEMINI_API_KEY_2"': ("GEMINI_API_KEY_2",),
+    'api_key: "os.environ/GEMINI_API_KEY_3"': ("GEMINI_API_KEY_3",),
+    '<<: *provider-azure': ("AZURE_AI_API_KEY", "AZURE_AI_API_BASE"),
+    'api_key: "os.environ/AZURE_AI_API_KEY"': ("AZURE_AI_API_KEY",),
+    'api_base: "os.environ/AZURE_AI_API_BASE"': ("AZURE_AI_API_BASE",),
+    '<<: *provider-local': ("OLLAMA_BASE_URL",),
+    'api_base: "os.environ/OLLAMA_BASE_URL"': ("OLLAMA_BASE_URL",),
 }
 
 
@@ -17,11 +24,15 @@ def has_value(name: str) -> bool:
     return bool(os.getenv(name, "").strip())
 
 
+def has_values(names: tuple[str, ...]) -> bool:
+    return all(has_value(name) for name in names)
+
+
 def should_keep_block(block: list[str]) -> bool:
     block_text = "".join(block)
-    for marker, env_name in OPTIONAL_GEMINI_MARKERS.items():
+    for marker, env_names in OPTIONAL_PROVIDER_MARKERS.items():
         if marker in block_text:
-            return has_value(env_name)
+            return has_values(env_names)
     return True
 
 

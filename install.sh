@@ -338,10 +338,11 @@ configure_llm_providers() {
     fi
 
     # Ollama (local)
-    if prompt_yes_no "Enable Ollama (local models)" "n"; then
-        log_info "Ollama will be started as part of the stack"
+    if prompt_yes_no "Enable Ollama (local models)" "y"; then
+        log_info "Ollama will be started as the default local-first model route"
+        LLM_PROVIDERS[OLLAMA_BASE_URL]="http://host.docker.internal:11434"
         LLM_PROVIDERS[ENABLE_OLLAMA]="true"
-        LLM_PROVIDERS[OLLAMA_MODELS]="deepseek-coder-v2"
+        LLM_PROVIDERS[OLLAMA_MODELS]="gemma4:26b"
         SELECTED_PROVIDERS+=("Ollama (local)")
         log_success "Ollama enabled"
     fi
@@ -471,6 +472,10 @@ GITEA_URL=http://gitea:3000
 GITEA_ADMIN_USER=cuemarshal-admin
 GITEA_ADMIN_PASSWORD=$GITEA_ADMIN_PASSWORD
 GITEA_ADMIN_EMAIL=admin@cuemarshal.local
+GITEA_ROOT_URL=http://localhost:3300/
+GITEA_DOMAIN=localhost
+GITEA_SSH_DOMAIN=localhost
+GITEA_SSH_PORT=2223
 GITEA_BOT_TOKEN=
 GITEA_TOKEN=
 

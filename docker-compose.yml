@@ -23,6 +23,23 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  init-postgres:
+    image: postgres:18-alpine
+    container_name: cuemarshal-init-postgres
+    entrypoint: ["/bin/sh", "/bootstrap/bootstrap.sh"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ./infrastructure/postgres/bootstrap.sh:/bootstrap/bootstrap.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cuemarshal
+    restart: "no"
+
   redis:
     image: redis:8-alpine
     container_name: cuemarshal-redis
@@ -66,6 +83,10 @@ services:
     environment:
       - USER_UID=1000
       - USER_GID=1000
+      - GITEA_DOMAIN=${GITEA_DOMAIN:-localhost}
+      - GITEA_ROOT_URL=${GITEA_ROOT_URL:-http://localhost:3300/}
+      - GITEA_SSH_DOMAIN=${GITEA_SSH_DOMAIN:-localhost}
+      - GITEA_SSH_PORT=${GITEA_SSH_PORT:-2223}
       - GITEA__database__DB_TYPE=postgres
       - GITEA__database__HOST=postgres:5432
       - GITEA__database__NAME=gitea
@@ -78,14 +99,41 @@ services:
       - "3300:3000"
       - "2223:22"
     entrypoint:
-      [
-        "/bin/sh",
-        "-c",
-        "if [ ! -f /data/gitea/conf/app.ini ]; then mkdir -p /data/gitea/conf && cp /etc/templates/app.ini /data/gitea/conf/app.ini && chown git:git /data/gitea/conf/app.ini; fi && exec /usr/bin/entrypoint",
-      ]
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        APP_INI=/data/gitea/conf/app.ini
+        GITEA_DOMAIN_VALUE="${GITEA_DOMAIN:-localhost}"
+        GITEA_ROOT_URL_VALUE="${GITEA_ROOT_URL:-http://localhost:3300/}"
+        GITEA_SSH_DOMAIN_VALUE="${GITEA_SSH_DOMAIN:-}"
+        GITEA_SSH_PORT_VALUE="${GITEA_SSH_PORT:-2223}"
+        escape_sed() {
+          printf '%s' "$$1" | sed 's/[\/&]/\\&/g'
+        }
+
+        if [ -z "$$GITEA_SSH_DOMAIN_VALUE" ]; then
+          GITEA_SSH_DOMAIN_VALUE="$$GITEA_DOMAIN_VALUE"
+        fi
+
+        mkdir -p /data/gitea/conf
+        if [ ! -f "$$APP_INI" ]; then
+          cp /etc/templates/app.ini "$$APP_INI"
+          chown git:git "$$APP_INI"
+        fi
+
+        sed -i "s|^DOMAIN = .*|DOMAIN = $$(escape_sed "$$GITEA_DOMAIN_VALUE")|" "$$APP_INI"
+        sed -i "s|^ROOT_URL = .*|ROOT_URL = $$(escape_sed "$$GITEA_ROOT_URL_VALUE")|" "$$APP_INI"
+        sed -i "s|^SSH_DOMAIN = .*|SSH_DOMAIN = $$(escape_sed "$$GITEA_SSH_DOMAIN_VALUE")|" "$$APP_INI"
+        sed -i "s|^SSH_PORT = .*|SSH_PORT = $$(escape_sed "$$GITEA_SSH_PORT_VALUE")|" "$$APP_INI"
+
+        chown git:git "$$APP_INI"
+        exec /usr/bin/entrypoint
     depends_on:
       postgres:
         condition: service_healthy
+      init-postgres:
+        condition: service_completed_successfully
     networks:
       - cuemarshal
     healthcheck:
@@ -108,6 +156,8 @@ services:
       context: ./services/gateway
       dockerfile: Dockerfile
     container_name: cuemarshal-gateway
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -124,11 +174,14 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     volumes:
       - ./services/gateway/litellm_config.yaml:/app/config.yaml:ro
     depends_on:
       postgres:
         condition: service_healthy
+      init-postgres:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     networks:
@@ -187,6 +240,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      init-postgres:
+        condition: service_completed_successfully
     networks:
       - cuemarshal
     healthcheck:
@@ -216,6 +271,8 @@ services:
       - GRAFANA_URL=http://grafana:3000
       - GRAFANA_TOKEN=${GRAFANA_SERVICE_TOKEN}
     depends_on:
+      init-postgres:
+        condition: service_completed_successfully
       gateway:
         condition: service_healthy
       redis:
@@ -250,6 +307,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      init-postgres:
+        condition: service_completed_successfully
       gateway:
         condition: service_healthy
     networks:
@@ -324,6 +383,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      init-postgres:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       gitea:
@@ -643,6 +704,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      init-postgres:
+        condition: service_completed_successfully
     networks:
       - cuemarshal
     healthcheck:

@@ -11,12 +11,12 @@ x-providers:
   gemini2: &provider-gemini2 { api_key: "os.environ/GEMINI_API_KEY_2" }
   gemini3: &provider-gemini3 { api_key: "os.environ/GEMINI_API_KEY_3" }
   azure:   &provider-azure   { api_key: "os.environ/AZURE_AI_API_KEY", api_base: "os.environ/AZURE_AI_API_BASE" }
-  local:   &provider-local   { api_base: "http://host.docker.internal:1234/v1", api_key: "local" }
+  local:   &provider-local   { api_base: "os.environ/OLLAMA_BASE_URL", api_key: "local" }
 
 model_list:
   # ═══════════════════════════════════════════════════════
   # Tier 1: Simple tasks (formatting, docs, typos, labels)
-  # Priority: Groq (1) → Gemini 2.5 Flash (2, load-balanced across keys) → Azure AI (3) → Local (4)
+  # Priority: Local Ollama (0) → Groq (1) → Gemini 2.5 Flash (2, load-balanced across keys) → Azure AI (3)
   # ═══════════════════════════════════════════════════════
   - model_name: "tier1"
     litellm_params:
@@ -56,8 +56,8 @@ model_list:
   - model_name: "tier1"
     litellm_params:
       <<: *provider-local
-      model: "openai/qwen3-coder-30b"
-      order: 4
+      model: "ollama/gemma4:26b"
+      order: 0
     model_info: *model-info-small
 
   # ═══════════════════════════════════════════════════════
@@ -101,8 +101,8 @@ model_list:
   - model_name: "tier2"
     litellm_params:
       <<: *provider-local
-      model: "openai/qwen3-coder-30b"
-      order: 4
+      model: "ollama/gemma4:26b"
+      order: 0
     model_info: *model-info-medium
 
   # ═══════════════════════════════════════════════════════
@@ -146,8 +146,8 @@ model_list:
   - model_name: "tier3"
     litellm_params:
       <<: *provider-local
-      model: "openai/qwen3-coder-30b"
-      order: 4
+      model: "ollama/gemma4:26b"
+      order: 0
     model_info: *model-info-medium
 
   # ═══════════════════════════════════════════════════════
@@ -192,8 +192,8 @@ model_list:
   - model_name: "gpt-4o-mini"
     litellm_params:
       <<: *provider-local
-      model: "openai/qwen3-coder-30b"
-      order: 4
+      model: "ollama/gemma4:26b"
+      order: 0
     model_info: *model-info-small
 
   - model_name: "gpt-4o"
@@ -234,8 +234,8 @@ model_list:
   - model_name: "gpt-4o"
     litellm_params:
       <<: *provider-local
-      model: "openai/qwen3-coder-30b"
-      order: 4
+      model: "ollama/gemma4:26b"
+      order: 0
     model_info: *model-info-medium
 
   - model_name: "gpt-4.1"
@@ -276,8 +276,8 @@ model_list:
   - model_name: "gpt-4.1"
     litellm_params:
       <<: *provider-local
-      model: "openai/qwen3-coder-30b"
-      order: 4
+      model: "ollama/gemma4:26b"
+      order: 0
     model_info: *model-info-medium
 
   - model_name: "gpt-4.1-mini"
@@ -318,14 +318,14 @@ model_list:
   - model_name: "gpt-4.1-mini"
     litellm_params:
       <<: *provider-local
-      model: "openai/qwen3-coder-30b"
-      order: 4
+      model: "ollama/gemma4:26b"
+      order: 0
     model_info: *model-info-small
 
 router_settings:
   # Use simple-shuffle routing (default, recommended) with order-based priority
   # With enable_pre_call_checks=true, the router respects the 'order' field:
-  # Groq (order: 1) → Gemini 2.5 Flash (order: 2, load-balanced across up to 3 keys) → Azure AI (order: 3) → Local (order: 4)
+  # Local Ollama (order: 0) → Groq (1) → Gemini 2.5 Flash (2, load-balanced across up to 3 keys) → Azure AI (3)
   # Simple-shuffle picks randomly among deployments with the same order value
   routing_strategy: "simple-shuffle"
   
@@ -335,7 +335,7 @@ router_settings:
   
   # Retry configuration: num_retries controls fallback across providers.
   # With 6 deployments per tier/model alias group: initial attempt + 5 retries can
-  # traverse Groq, up to 3 Gemini keys, Azure AI, and Local before giving up.
+  # traverse Local Ollama, Groq, up to 3 Gemini keys, and Azure AI before giving up.
   num_retries: 5
   
   # If a provider fails with certain errors (rate limit, timeout, etc.), 
@@ -363,7 +363,7 @@ router_settings:
     
     # Provider-level fallback via order-based priority:
     # Pre-call checks filter deployments by 'order' field (lowest = highest priority):
-    # All tiers: Groq (1) → Gemini 2.5 Flash across up to 3 keys (2) → Azure AI (3) → Local (4)
+    # All tiers: Local Ollama (0) → Groq (1) → Gemini 2.5 Flash across up to 3 keys (2) → Azure AI (3)
     #
     # These aliases map to tier fallback chains if a tier-specific request fails
     - gpt-4o-mini: ["tier2", "tier3"]      # maps to tier1; fallback chain: tier2, tier3

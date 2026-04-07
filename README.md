@@ -75,7 +75,7 @@ Open **http://localhost:3300** — Gitea is ready.
 
 - Docker and Docker Compose v2+
 - 8 GB RAM minimum (16 GB recommended)
-- At least one LLM API key:
+- Local Ollama at `http://localhost:11434` running `gemma4:26b`, or at least one cloud LLM API key:
   - [Groq](https://console.groq.com) (free, fast — primary)
   - [Google Gemini](https://aistudio.google.com) (free — fallback)
   - [Azure AI](https://azure.microsoft.com/en-us/products/ai-services) (paid — second fallback)

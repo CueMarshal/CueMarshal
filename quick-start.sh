@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 # CueMarshal Quick Start
 # Sets up everything from scratch — secrets, env, services, health checks.
@@ -12,6 +12,249 @@ RESET="\033[0m"
 
 echo -e "${BOLD}CueMarshal Quick Start${RESET}"
 echo "────────────────────────────────────"
+
+GITEA_ROOT_URL="http://localhost:3300/"
+GITEA_URL="http://localhost:3300"
+GITEA_DOMAIN="localhost"
+GITEA_SSH_DOMAIN="localhost"
+GITEA_SSH_PORT="2223"
+CONDUCTOR_URL="http://localhost:8180/api"
+NGINX_HEALTH_URL="http://localhost:8180/health"
+OLLAMA_BASE_URL="http://host.docker.internal:11434"
+
+env_value() {
+  if [ ! -f ".env" ]; then
+    return 0
+  fi
+
+  grep -E "^$1=" .env | tail -n 1 | cut -d'=' -f2-
+}
+
+load_runtime_config() {
+  local root_url
+  local domain
+  local ssh_domain
+  local ssh_port
+  local ollama_base_url
+
+  root_url=$(env_value "GITEA_ROOT_URL")
+  if [ -n "${root_url}" ]; then
+    GITEA_ROOT_URL="${root_url}"
+  fi
+  GITEA_URL="${GITEA_ROOT_URL%/}"
+
+  domain=$(env_value "GITEA_DOMAIN")
+  if [ -n "${domain}" ]; then
+    GITEA_DOMAIN="${domain}"
+  fi
+
+  ssh_domain=$(env_value "GITEA_SSH_DOMAIN")
+  if [ -n "${ssh_domain}" ]; then
+    GITEA_SSH_DOMAIN="${ssh_domain}"
+  else
+    GITEA_SSH_DOMAIN="${GITEA_DOMAIN}"
+  fi
+
+  ssh_port=$(env_value "GITEA_SSH_PORT")
+  if [ -n "${ssh_port}" ]; then
+    GITEA_SSH_PORT="${ssh_port}"
+  fi
+
+  ollama_base_url=$(env_value "OLLAMA_BASE_URL")
+  if [ -n "${ollama_base_url}" ]; then
+    OLLAMA_BASE_URL="${ollama_base_url}"
+  fi
+}
+
+host_ollama_url() {
+  printf '%s' "${OLLAMA_BASE_URL}" | sed 's|host\.docker\.internal|localhost|g'
+}
+
+show_service_logs() {
+  local service=$1
+  echo ""
+  echo -e "${YELLOW}Recent logs for ${service}:${RESET}"
+  docker compose logs --no-color --tail=80 "${service}" || true
+}
+
+container_id_for() {
+  docker compose ps -a -q "$1" 2>/dev/null || true
+}
+
+container_state() {
+  docker inspect --format='{{.State.Status}}' "$1" 2>/dev/null || echo "unknown"
+}
+
+container_health() {
+  docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$1" 2>/dev/null || echo "unknown"
+}
+
+wait_for_service_health() {
+  local service=$1
+  local name=$2
+  local timeout=$3
+  local elapsed=0
+  local container_id state health
+
+  while [ "${elapsed}" -lt "${timeout}" ]; do
+    container_id=$(container_id_for "${service}")
+    if [ -n "${container_id}" ]; then
+      state=$(container_state "${container_id}")
+      health=$(container_health "${container_id}")
+
+      if [ "${state}" = "running" ] && { [ "${health}" = "healthy" ] || [ "${health}" = "none" ]; }; then
+        echo -e "${GREEN}✓ ${name} is healthy${RESET}"
+        return 0
+      fi
+
+      if [ "${state}" = "exited" ] || [ "${state}" = "dead" ] || [ "${health}" = "unhealthy" ]; then
+        echo -e "${RED}✗ ${name} failed to start (state=${state}, health=${health})${RESET}"
+        show_service_logs "${service}"
+        exit 1
+      fi
+    fi
+
+    printf "."
+    sleep 5
+    elapsed=$((elapsed + 5))
+  done
+
+  echo -e "\n${RED}✗ Timed out waiting for ${name}${RESET}"
+  show_service_logs "${service}"
+  exit 1
+}
+
+wait_for_init_job() {
+  local service=$1
+  local name=$2
+  local timeout=$3
+  local elapsed=0
+  local container_id state exit_code
+
+  while [ "${elapsed}" -lt "${timeout}" ]; do
+    container_id=$(container_id_for "${service}")
+    if [ -n "${container_id}" ]; then
+      state=$(container_state "${container_id}")
+      exit_code=$(docker inspect --format='{{.State.ExitCode}}' "${container_id}" 2>/dev/null || echo "1")
+
+      if [ "${state}" = "exited" ] && [ "${exit_code}" = "0" ]; then
+        echo -e "${GREEN}✓ ${name} completed${RESET}"
+        return 0
+      fi
+
+      if [ "${state}" = "exited" ] && [ "${exit_code}" != "0" ]; then
+        echo -e "${RED}✗ ${name} failed${RESET}"
+        show_service_logs "${service}"
+        exit 1
+      fi
+    fi
+
+    printf "."
+    sleep 5
+    elapsed=$((elapsed + 5))
+  done
+
+  echo -e "\n${RED}✗ Timed out waiting for ${name}${RESET}"
+  show_service_logs "${service}"
+  exit 1
+}
+
+check_container_service() {
+  local service=$1
+  local name=$2
+  local container_id state health
+
+  container_id=$(container_id_for "${service}")
+  if [ -z "${container_id}" ]; then
+    echo -e "  ${YELLOW}⚠ ${name} (container not created)${RESET}"
+    return
+  fi
+
+  state=$(container_state "${container_id}")
+  health=$(container_health "${container_id}")
+
+  if [ "${state}" = "running" ] && { [ "${health}" = "healthy" ] || [ "${health}" = "none" ]; }; then
+    echo -e "  ${GREEN}✓ ${name}${RESET}"
+  else
+    echo -e "  ${YELLOW}⚠ ${name} (state=${state}, health=${health})${RESET}"
+  fi
+}
+
+repair_gitea_volume() {
+  local volume_name="cuemarshal-gitea-data"
+  local repair_result
+
+  if ! docker volume inspect "${volume_name}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  repair_result=$(docker run --rm --entrypoint /bin/sh \
+    -e GITEA_DOMAIN="${GITEA_DOMAIN}" \
+    -e GITEA_ROOT_URL="${GITEA_ROOT_URL}" \
+    -e GITEA_SSH_DOMAIN="${GITEA_SSH_DOMAIN}" \
+    -e GITEA_SSH_PORT="${GITEA_SSH_PORT}" \
+    -v "${volume_name}:/data" \
+    gitea/gitea:1.25 \
+    -eu -c '
+      APP_INI=/data/gitea/conf/app.ini
+      [ -f "$APP_INI" ] || exit 0
+
+      escape() {
+        printf "%s" "$1" | sed "s/[\/&]/\\\\&/g"
+      }
+
+      repaired=0
+      current_domain=$(sed -n "s/^DOMAIN = //p" "$APP_INI" | head -n 1)
+      current_root_url=$(sed -n "s/^ROOT_URL = //p" "$APP_INI" | head -n 1)
+      current_ssh_domain=$(sed -n "s/^SSH_DOMAIN = //p" "$APP_INI" | head -n 1)
+      current_ssh_port=$(sed -n "s/^SSH_PORT = //p" "$APP_INI" | head -n 1)
+
+      if [ "$current_domain" != "$GITEA_DOMAIN" ]; then
+        sed -i "s|^DOMAIN = .*|DOMAIN = $(escape "$GITEA_DOMAIN")|" "$APP_INI"
+        repaired=1
+      fi
+
+      if [ "$current_root_url" != "$GITEA_ROOT_URL" ]; then
+        sed -i "s|^ROOT_URL = .*|ROOT_URL = $(escape "$GITEA_ROOT_URL")|" "$APP_INI"
+        repaired=1
+      fi
+
+      if [ "$current_ssh_domain" != "$GITEA_SSH_DOMAIN" ]; then
+        sed -i "s|^SSH_DOMAIN = .*|SSH_DOMAIN = $(escape "$GITEA_SSH_DOMAIN")|" "$APP_INI"
+        repaired=1
+      fi
+
+      if [ "$current_ssh_port" != "$GITEA_SSH_PORT" ]; then
+        sed -i "s|^SSH_PORT = .*|SSH_PORT = $(escape "$GITEA_SSH_PORT")|" "$APP_INI"
+        repaired=1
+      fi
+
+      if [ "$repaired" -eq 1 ]; then
+        echo repaired
+      fi
+    ')
+
+  if [ "${repair_result}" = "repaired" ]; then
+    echo -e "${GREEN}✓ Repaired persisted Gitea config${RESET}"
+  fi
+}
+
+ensure_llm_provider() {
+  if grep -qE "^GROQ_API_KEY=.+" .env || grep -qE "^GEMINI_API_KEY=.+" .env || grep -qE "^AZURE_AI_API_KEY=.+" .env; then
+    echo -e "${GREEN}✓ Cloud LLM provider detected${RESET}"
+  elif curl -sf "$(host_ollama_url)/api/tags" >/dev/null 2>&1; then
+    echo -e "${GREEN}✓ Local Ollama detected${RESET}"
+  else
+    echo ""
+    echo -e "${YELLOW}Important: Configure at least one cloud LLM API key or start local Ollama before continuing:${RESET}"
+    echo "  GROQ_API_KEY     → https://console.groq.com (free)"
+    echo "  GEMINI_API_KEY   → https://aistudio.google.com (free)"
+    echo "  AZURE_AI_API_KEY → https://azure.microsoft.com (paid, optional)"
+    echo "  OLLAMA_BASE_URL  → ${OLLAMA_BASE_URL} (default local Ollama)"
+    echo ""
+    read -p "Press Enter after updating .env or starting Ollama, or Ctrl+C to cancel..."
+  fi
+}
 
 # ── Check Docker ──────────────────────────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
@@ -49,45 +292,36 @@ if [ ! -f ".env" ]; then
 
   # Replace placeholder secrets with real ones
   GITEA_ADMIN_PASSWORD=$(generate_secret | cut -c1-16)
-  GITEA_SECRET_KEY=$(generate_secret)
-  GITEA_INTERNAL_TOKEN=$(generate_secret)
   POSTGRES_PASSWORD=$(generate_secret)
   REDIS_PASSWORD=$(generate_secret)
+  WEBHOOK_SECRET=$(generate_secret)
   CONDUCTOR_SECRET=$(generate_secret)
+  LITELLM_MASTER_KEY=$(generate_secret)
 
   # Use sed to fill in secrets (works on both Linux and macOS)
   sed -i.bak \
     -e "s|^GITEA_ADMIN_PASSWORD=.*|GITEA_ADMIN_PASSWORD=${GITEA_ADMIN_PASSWORD}|" \
-    -e "s|^GITEA_SECRET_KEY=.*|GITEA_SECRET_KEY=${GITEA_SECRET_KEY}|" \
-    -e "s|^GITEA_INTERNAL_TOKEN=.*|GITEA_INTERNAL_TOKEN=${GITEA_INTERNAL_TOKEN}|" \
     -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASSWORD}|" \
     -e "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=${REDIS_PASSWORD}|" \
+    -e "s|^WEBHOOK_SECRET=.*|WEBHOOK_SECRET=${WEBHOOK_SECRET}|" \
     -e "s|^CONDUCTOR_SECRET=.*|CONDUCTOR_SECRET=${CONDUCTOR_SECRET}|" \
+    -e "s|^LITELLM_MASTER_KEY=.*|LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}|" \
     .env
   rm -f .env.bak
 
   echo -e "${GREEN}✓ .env created with auto-generated secrets${RESET}"
-  echo ""
-  echo -e "${YELLOW}Important: Add your LLM API keys to .env before continuing:${RESET}"
-  echo "  GROQ_API_KEY     → https://console.groq.com (free)"
-  echo "  GEMINI_API_KEY   → https://aistudio.google.com (free)"
-  echo "  AZURE_AI_API_KEY → https://azure.microsoft.com (paid, optional)"
-  echo ""
-
-  # Check if at least one key is set
-  if grep -qE "^GROQ_API_KEY=.+" .env || grep -qE "^GEMINI_API_KEY=.+" .env; then
-    echo -e "${GREEN}✓ LLM API key detected${RESET}"
-  else
-    read -p "Press Enter after adding your API keys to .env, or Ctrl+C to cancel..."
-  fi
 else
   echo -e "${GREEN}✓ .env found${RESET}"
 fi
+
+load_runtime_config
+ensure_llm_provider
 
 # ── Pull images ───────────────────────────────────────────────────────────────
 echo ""
 echo "Pulling Docker images (this may take a few minutes on first run)..."
 docker compose pull --quiet 2>/dev/null || true
+repair_gitea_volume
 
 # ── Start services ────────────────────────────────────────────────────────────
 echo ""
@@ -96,31 +330,16 @@ docker compose up -d
 
 # ── Wait for Gitea init ───────────────────────────────────────────────────────
 echo ""
-echo "Waiting for Gitea to initialize (~60 seconds)..."
+echo "Waiting for database bootstrap to finish..."
+wait_for_init_job "init-postgres" "init-postgres" 120
 
-TIMEOUT=120
-ELAPSED=0
-while [ $ELAPSED -lt $TIMEOUT ]; do
-  STATUS=$(docker inspect --format='{{.State.Status}}' cuemarshal-init-gitea 2>/dev/null || echo "not_found")
-  EXIT_CODE=$(docker inspect --format='{{.State.ExitCode}}' cuemarshal-init-gitea 2>/dev/null || echo "1")
+echo ""
+echo "Waiting for Gitea to become healthy..."
+wait_for_service_health "gitea" "Gitea" 120
 
-  if [ "$STATUS" = "exited" ] && [ "$EXIT_CODE" = "0" ]; then
-    echo -e "${GREEN}✓ Gitea initialized${RESET}"
-    break
-  elif [ "$STATUS" = "exited" ] && [ "$EXIT_CODE" != "0" ]; then
-    echo -e "${RED}✗ Gitea init failed. Check logs:${RESET}"
-    echo "  docker logs cuemarshal-init-gitea"
-    exit 1
-  fi
-
-  printf "."
-  sleep 5
-  ELAPSED=$((ELAPSED + 5))
-done
-
-if [ $ELAPSED -ge $TIMEOUT ]; then
-  echo -e "\n${YELLOW}⚠ Timed out waiting for init-gitea. Services may still be starting.${RESET}"
-fi
+echo ""
+echo "Waiting for init-gitea to finish..."
+wait_for_init_job "init-gitea" "init-gitea" 600
 
 # ── Health check ──────────────────────────────────────────────────────────────
 echo ""
@@ -139,9 +358,10 @@ check_service() {
 }
 
 sleep 5
-check_service "Gitea UI" "http://localhost:3300"
-check_service "Conductor" "http://localhost:8180/conductor/health"
-check_service "Nginx proxy" "http://localhost:8180"
+check_service "Gitea API" "${GITEA_URL}/api/v1/version"
+check_container_service "gateway" "LiteLLM Gateway"
+check_container_service "conductor" "Conductor"
+check_service "Nginx proxy" "${NGINX_HEALTH_URL}"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
@@ -151,15 +371,15 @@ echo "────────────────────────�
 ADMIN_PASSWORD=$(grep "^GITEA_ADMIN_PASSWORD=" .env | cut -d'=' -f2)
 
 echo ""
-echo "  Gitea UI:  http://localhost:3300"
+echo "  Gitea UI:  ${GITEA_URL}"
 echo "  Username:  cuemarshal-admin"
 echo "  Password:  ${ADMIN_PASSWORD}"
 echo ""
-echo "  Conductor: http://localhost:8180/conductor/health"
+echo "  Conductor: ${CONDUCTOR_URL}"
 echo "  Nginx:     http://localhost:8180"
 echo ""
 echo "Next steps:"
-echo "  1. Log in to Gitea at http://localhost:3300"
+echo "  1. Log in to Gitea at ${GITEA_URL}"
 echo "  2. Create an issue in the cuemarshal-org/default-project repo"
 echo "  3. Watch the Conductor pick it up and assign agents"
 echo ""
@@ -168,7 +388,7 @@ echo ""
 
 # Try to open browser
 if command -v open &>/dev/null; then
-  open "http://localhost:3300"
+  open "${GITEA_URL}"
 elif command -v xdg-open &>/dev/null; then
-  xdg-open "http://localhost:3300" &>/dev/null &
+  xdg-open "${GITEA_URL}" &>/dev/null &
 fi

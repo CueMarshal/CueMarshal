@@ -19,14 +19,17 @@ See `litellm_config.yaml` for full configuration.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | Yes* | Anthropic API key |
-| `OPENAI_API_KEY` | Yes* | OpenAI API key |
+| `GROQ_API_KEY` | No* | Groq API key fallback |
+| `GEMINI_API_KEY` | No* | Gemini API key fallback |
+| `AZURE_AI_API_KEY` | No* | Azure AI API key fallback |
+| `AZURE_AI_API_BASE` | No* | Azure AI endpoint fallback |
+| `OLLAMA_BASE_URL` | No* | Local Ollama base URL (default: `http://host.docker.internal:11434`) |
 | `LITELLM_MASTER_KEY` | Yes | Master key for admin access |
 | `DATABASE_URL` | Yes | PostgreSQL connection for cost tracking |
 | `REDIS_HOST` | No | Redis host (default: redis) |
 | `REDIS_PORT` | No | Redis port (default: 6379) |
 
-\* At least one provider API key is required.
+\* Configure either local Ollama or at least one cloud provider.
 
 ## Usage
 
