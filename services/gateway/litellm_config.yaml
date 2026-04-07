@@ -106,6 +106,47 @@ model_list:
     model_info: *model-info-medium
 
   # ═══════════════════════════════════════════════════════
+  # Chat: Interactive chat with tool-calling (cloud-only)
+  # Local models struggle with complex multi-tool orchestration,
+  # so the chat model group excludes Ollama and routes directly
+  # to cloud providers that handle function-calling reliably.
+  # ═══════════════════════════════════════════════════════
+  - model_name: "chat"
+    litellm_params:
+      <<: *provider-groq
+      model: "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+      order: 1
+    model_info: *model-info-medium
+
+  - model_name: "chat"
+    litellm_params:
+      <<: *provider-gemini1
+      model: "gemini/gemini-2.5-flash"
+      order: 2
+    model_info: *model-info-medium
+
+  - model_name: "chat"
+    litellm_params:
+      <<: *provider-gemini2
+      model: "gemini/gemini-2.5-flash"
+      order: 2
+    model_info: *model-info-medium
+
+  - model_name: "chat"
+    litellm_params:
+      <<: *provider-gemini3
+      model: "gemini/gemini-2.5-flash"
+      order: 2
+    model_info: *model-info-medium
+
+  - model_name: "chat"
+    litellm_params:
+      <<: *provider-azure
+      model: "azure_ai/gpt-5.2-chat"
+      order: 3
+    model_info: *model-info-medium
+
+  # ═══════════════════════════════════════════════════════
   # Tier 3: Complex tasks (architecture, security, refactor)
   # ═══════════════════════════════════════════════════════
   - model_name: "tier3"
@@ -360,6 +401,7 @@ router_settings:
     - tier1: ["tier2", "tier3"]
     - tier2: ["tier1", "tier3"]
     - tier3: ["tier2", "tier1"]
+    - chat: ["tier2", "tier3"]
     
     # Provider-level fallback via order-based priority:
     # Pre-call checks filter deployments by 'order' field (lowest = highest priority):
