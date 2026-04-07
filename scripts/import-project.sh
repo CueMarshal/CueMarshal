@@ -198,7 +198,7 @@ fi
 # ── Step 3: Seed workflow files ──────────────────────────────────────
 echo "[3/7] Seeding workflow files (.gitea/workflows/)..."
 
-WORKFLOW_FILES="task-execute.yml code-review.yml run-tests.yml self-improve.yml idle-check.yml sonar-scan.yml validate-config.yml"
+WORKFLOW_FILES="task-execute.yml code-review.yml run-tests.yml self-improve.yml idle-check.yml sonar-scan.yml"
 SEEDED_COUNT=0
 
 for wf in ${WORKFLOW_FILES}; do
