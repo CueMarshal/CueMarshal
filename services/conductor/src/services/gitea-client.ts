@@ -426,6 +426,15 @@ export class GiteaClient {
   }) {
     return this.request("POST", `/repos/${owner}/${repo}/hooks`, data);
   }
+
+  /**
+   * Set a repository-level action secret (create or update)
+   */
+  async setRepoSecret(owner: string, repo: string, name: string, value: string) {
+    return this.request("PUT", `/repos/${owner}/${repo}/actions/secrets/${name}`, {
+      data: value,
+    });
+  }
 }
 
 export const giteaClient = new GiteaClient();

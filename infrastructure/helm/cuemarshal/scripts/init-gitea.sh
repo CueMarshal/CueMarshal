@@ -580,6 +580,7 @@ seed_labels_webhook_runner() {
                 \"push\",
                 \"workflow_run\"
             ],
+            \"authorization_header\": \"Bearer ${WEBHOOK_SECRET}\",
             \"active\": true
         }" > /dev/null 2>&1 || echo "  Webhook already exists"
     echo "  Webhook configured"
