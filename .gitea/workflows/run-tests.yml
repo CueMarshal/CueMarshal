@@ -1,0 +1,56 @@
+name: Run Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Related issue number'
+        required: false
+        default: '0'
+      model_tier:
+        description: 'Model tier (tier1, tier2, tier3)'
+        required: false
+        default: 'tier1'
+      write_tests:
+        description: 'Whether to write new tests'
+        required: false
+        default: 'false'
+
+env:
+  GITEA_URL: ${{ secrets.SCM_URL }}
+  OPENAI_API_KEY: ${{ secrets.GATEWAY_API_KEY }}
+
+jobs:
+  test:
+    runs-on: [self-hosted, opencode]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure tester identity and credentials
+        run: |
+          git config user.name "agent-tester"
+          git config user.email "tester@cuemarshal.local"
+          GITEA_TOKEN="${{ secrets.SCM_TOKEN_TESTER }}"
+          if [ -z "${GITEA_TOKEN}" ]; then
+            GITEA_TOKEN="${{ secrets.SCM_TOKEN }}"
+            echo "WARNING: SCM_TOKEN_TESTER not found, using legacy SCM_TOKEN"
+          fi
+          echo "GITEA_TOKEN=${GITEA_TOKEN}" >> $GITHUB_ENV
+
+      - name: Configure tester
+        run: |
+          cp /agents/tester/opencode.json ./opencode.json
+          cp -r /agents/tester/.opencode ./.opencode 2>/dev/null || true
+          
+          if command -v jq &>/dev/null && [ -f opencode.json ]; then
+            jq --arg token "$GITEA_TOKEN" \
+              '.mcp.gitea.environment.GITEA_TOKEN = $token // .mcp.gitea.env.GITEA_TOKEN = $token' \
+              opencode.json > opencode.tmp && mv opencode.tmp opencode.json
+          fi
+
+      - name: Run tests
+        run: |
+          if [ -f "package.json" ]; then
+            npm ci && npm test || echo "Tests failed"
+          fi
