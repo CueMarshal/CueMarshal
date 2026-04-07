@@ -27,6 +27,8 @@ const SELF_IMPROVE_COOLDOWN_KEY = "self-improvement:cooldown";
 const SELF_IMPROVE_LAST_RUN_KEY = "self-improvement:last-run";
 
 // Interfaces (PLAN-01 + PLAN-11)
+export type CycleOutcome = "work_produced" | "no_findings" | "failed";
+
 export interface ReadinessCheck {
   ready: boolean;
   reasons_blocking: string[];
@@ -382,10 +384,12 @@ export class SelfImprovementService {
       });
 
       if (result.triggered) {
-        const cooldownSeconds = config.selfImproveCooldownHours * 3600;
-        await setWithTTL(SELF_IMPROVE_COOLDOWN_KEY, String(Math.floor(Date.now() / 1000)), cooldownSeconds);
+        // Set a short dispatch guard instead of the full cooldown.
+        // The full cooldown is applied later via completeCycle() when the workflow reports its outcome.
+        const guardSeconds = config.selfImproveDispatchGuardMinutes * 60;
+        await setWithTTL(SELF_IMPROVE_COOLDOWN_KEY, String(Math.floor(Date.now() / 1000)), guardSeconds);
         await setWithTTL(SELF_IMPROVE_LAST_RUN_KEY, new Date().toISOString(), 86400 * 7);
-        logger.info({ cooldownHours: config.selfImproveCooldownHours }, "Self-improvement triggered successfully");
+        logger.info({ guardMinutes: config.selfImproveDispatchGuardMinutes }, "Self-improvement triggered, dispatch guard set");
         return { success: true };
       }
 
@@ -457,6 +461,53 @@ export class SelfImprovementService {
         correlationId,
       };
     }
+  }
+
+  /**
+   * Complete a self-improvement cycle with outcome-based cooldown.
+   * Called by the workflow via POST /api/internal/self-improve/completed.
+   */
+  async completeCycle(
+    outcome: CycleOutcome,
+    details?: { correlationId?: string; issuesCreated?: number }
+  ): Promise<void> {
+    const correlationId = details?.correlationId || "unknown";
+
+    switch (outcome) {
+      case "work_produced": {
+        const cooldownSeconds = config.selfImproveCooldownHours * 3600;
+        await setWithTTL(SELF_IMPROVE_COOLDOWN_KEY, String(Math.floor(Date.now() / 1000)), cooldownSeconds);
+        logger.info(
+          { outcome, cooldownHours: config.selfImproveCooldownHours, issuesCreated: details?.issuesCreated, correlationId },
+          "Self-improvement cycle completed with work, full cooldown set"
+        );
+        break;
+      }
+      case "no_findings": {
+        // Keep the dispatch guard (already set) — don't extend cooldown
+        logger.info(
+          { outcome, correlationId },
+          "Self-improvement cycle completed with no findings, dispatch guard retained"
+        );
+        break;
+      }
+      case "failed": {
+        // Clear cooldown to allow faster retry
+        await redisDel(SELF_IMPROVE_COOLDOWN_KEY);
+        this.recordFailure(correlationId, "Workflow reported failure");
+        logger.warn(
+          { outcome, correlationId },
+          "Self-improvement cycle failed, cooldown cleared for retry"
+        );
+        break;
+      }
+    }
+
+    logSelfImproveEvent(
+      outcome === "failed" ? SelfImproveEvent.CYCLE_FAILED : SelfImproveEvent.CYCLE_COMPLETED,
+      { outcome, issuesCreated: details?.issuesCreated },
+      correlationId
+    );
   }
 
   /**

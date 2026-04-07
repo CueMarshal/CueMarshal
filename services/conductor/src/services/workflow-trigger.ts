@@ -8,7 +8,6 @@
 
 import { giteaClient } from "./gitea-client.js";
 import { logger } from "../utils/logger.js";
-import { config } from "../config.js";
 
 
 const TASK_EXECUTE_WORKFLOW = "task-execute.yml";
@@ -44,26 +43,11 @@ interface DispatchTestsInput {
 }
 
 export class WorkflowTrigger {
-  private lastTriggerTime: Map<string, Date> = new Map();
-
   async triggerSelfImprovement(
     owner: string,
     repo: string,
     options: { source: string; reason: string; force?: boolean; correlationId?: string }
   ): Promise<{ triggered: boolean; message: string }> {
-    const lockKey = `${owner}/${repo}/self-improve`;
-    const now = new Date();
-    const cooldownMs = config.selfImproveCooldownHours * 60 * 60 * 1000;
-
-    if (!options.force) {
-      const last = this.lastTriggerTime.get(lockKey);
-      if (last && now.getTime() - last.getTime() < cooldownMs) {
-        const remaining = Math.ceil((cooldownMs - (now.getTime() - last.getTime())) / 60000);
-        logger.info({ lockKey, remaining }, "Self-improvement trigger in cooldown");
-        return { triggered: false, message: `Cooldown active: ${remaining} minutes remaining` };
-      }
-    }
-
     try {
       await giteaClient.dispatchWorkflow(owner, repo, SELF_IMPROVE_WORKFLOW, {
         ref: "main",
@@ -71,18 +55,12 @@ export class WorkflowTrigger {
           correlation_id: options.correlationId || "",
         },
       });
-      this.lastTriggerTime.set(lockKey, now);
       logger.info({ repo: `${owner}/${repo}`, source: options.source }, "Self-improvement triggered via workflow_dispatch");
       return { triggered: true, message: "Self-improvement workflow triggered successfully" };
     } catch (error) {
       logger.error({ error, repo: `${owner}/${repo}` }, "Failed to trigger self-improvement");
       throw error;
     }
-  }
-
-  isSelfImprovementInCooldown(owner: string, repo: string): boolean {
-    const last = this.lastTriggerTime.get(`${owner}/${repo}/self-improve`);
-    return last ? Date.now() - last.getTime() < config.selfImproveCooldownHours * 3600000 : false;
   }
 
   async dispatchTaskExecution(input: DispatchTaskExecutionInput): Promise<void> {

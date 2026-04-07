@@ -782,6 +782,37 @@ router.post("/self-improve/trigger", validateBearerToken, async (req, res): Prom
 });
 
 /**
+ * POST /api/internal/self-improve/completed
+ * Called by the self-improve workflow to report its outcome.
+ * Sets the appropriate cooldown based on whether work was produced.
+ * PROTECTED: requires bearer token
+ */
+const CycleOutcomeSchema = z.object({
+  outcome: z.enum(["work_produced", "no_findings", "failed"]),
+  correlation_id: z.string().optional(),
+  issues_created: z.number().int().nonnegative().optional(),
+});
+
+router.post("/self-improve/completed", validateBearerToken, async (req, res): Promise<void> => {
+  try {
+    const parsed = CycleOutcomeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      return;
+    }
+    const { outcome, correlation_id, issues_created } = parsed.data;
+    await selfImprovementService.completeCycle(outcome, {
+      correlationId: correlation_id,
+      issuesCreated: issues_created,
+    });
+    res.json({ success: true, outcome });
+  } catch (error) {
+    logger.error({ error }, "Failed to process self-improvement completion");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
+/**
  * GET /api/internal/projects
  * List all projects (used by conductor-mcp project_list tool)
  * PROTECTED: requires bearer token

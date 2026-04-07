@@ -13,6 +13,8 @@ env:
   GITEA_TOKEN: ${{ secrets.SCM_TOKEN }}
   OPENAI_API_KEY: ${{ secrets.GATEWAY_API_KEY }}
   LOCAL_ENDPOINT: http://127.0.0.1:4101
+  CONDUCTOR_URL: ${{ secrets.CONDUCTOR_URL }}
+  CONDUCTOR_SECRET: ${{ secrets.CONDUCTOR_SECRET }}
 
 jobs:
   discover:
@@ -203,7 +205,33 @@ jobs:
           - Skip findings that are too vague or would require significant architectural changes
           " --model "litellm/tier1"
 
-      - name: Log workflow completion
+      - name: Report cycle outcome to Conductor
         if: always()
         run: |
           echo "event=self_improve.cycle_completed correlationId=${{ env.CORRELATION_ID }} status=${{ job.status }}"
+
+          # Determine outcome
+          if [ "${{ job.status }}" = "failure" ]; then
+            OUTCOME="failed"
+            ISSUES_CREATED=0
+          elif [ "${SKIP_PRIORITIZE:-}" = "true" ]; then
+            OUTCOME="no_findings"
+            ISSUES_CREATED=0
+          else
+            OUTCOME="work_produced"
+            ISSUES_CREATED="${MAX:-0}"
+          fi
+
+          echo "Reporting outcome=$OUTCOME to Conductor..."
+
+          if [ -n "${CONDUCTOR_URL}" ] && [ -n "${CONDUCTOR_SECRET}" ]; then
+            curl -sf -X POST \
+              -H "Authorization: Bearer ${CONDUCTOR_SECRET}" \
+              -H "Content-Type: application/json" \
+              "${CONDUCTOR_URL}/api/internal/self-improve/completed" \
+              -d "{\"outcome\": \"${OUTCOME}\", \"correlation_id\": \"${{ env.CORRELATION_ID }}\", \"issues_created\": ${ISSUES_CREATED}}" \
+              && echo "✓ Outcome reported successfully" \
+              || echo "WARNING: Failed to report outcome (non-fatal)"
+          else
+            echo "WARNING: CONDUCTOR_URL or CONDUCTOR_SECRET not set, skipping outcome report"
+          fi
