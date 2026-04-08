@@ -121,3 +121,222 @@ jobs:
           if [ "$STATUS" = "ERROR" ]; then
             echo "::warning::Quality Gate failed — issues will be picked up by self-improvement scanner"
           fi
+
+      - name: Ensure Gitea Sonar labels exist
+        if: always() && env.SONAR_CONFIGURED == 'true'
+        env:
+          GITEA_TOKEN: ${{ github.token }}
+        run: |
+          REPO_FULL="${{ github.repository }}"
+          REPO_OWNER="${REPO_FULL%%/*}"
+          REPO_NAME="${REPO_FULL##*/}"
+          GITEA_API_URL="${GITHUB_SERVER_URL%/}/api/v1"
+
+          declare -A LABEL_COLORS=(
+            ["sonar"]="0075ca"
+            ["source:sonar"]="fbca04"
+            ["sonar: bug"]="d73a4a"
+            ["sonar: vulnerability"]="e4e669"
+            ["sonar: security hotspot"]="f9d0c4"
+            ["sonar: code smell"]="cfd3d7"
+            ["sonar: blocker"]="b60205"
+            ["sonar: critical"]="e11d48"
+            ["sonar: major"]="f97316"
+            ["sonar: minor"]="fbbf24"
+            ["sonar: info"]="0e8a16"
+          )
+
+          declare -A LABEL_DESCRIPTIONS=(
+            ["sonar"]="SonarQube finding"
+            ["source:sonar"]="Issue identified by SonarQube analysis"
+            ["sonar: bug"]="SonarQube issue type: Bug"
+            ["sonar: vulnerability"]="SonarQube issue type: Vulnerability"
+            ["sonar: security hotspot"]="SonarQube issue type: Security Hotspot"
+            ["sonar: code smell"]="SonarQube issue type: Code Smell"
+            ["sonar: blocker"]="SonarQube severity: Blocker"
+            ["sonar: critical"]="SonarQube severity: Critical"
+            ["sonar: major"]="SonarQube severity: Major"
+            ["sonar: minor"]="SonarQube severity: Minor"
+            ["sonar: info"]="SonarQube severity: Info"
+          )
+
+          EXISTING_LABELS=$(curl -sf \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            "${GITEA_API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/labels?limit=100")
+
+          for LABEL in "${!LABEL_COLORS[@]}"; do
+            if echo "${EXISTING_LABELS}" | jq -e --arg name "${LABEL}" '.[] | select(.name == $name)' > /dev/null; then
+              echo "Label '${LABEL}' already exists"
+            else
+              echo "Creating label '${LABEL}'..."
+              curl -sf -X POST \
+                -H "Authorization: token ${GITEA_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "${GITEA_API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/labels" \
+                -d "$(jq -cn \
+                  --arg name "${LABEL}" \
+                  --arg color "${LABEL_COLORS[$LABEL]}" \
+                  --arg description "${LABEL_DESCRIPTIONS[$LABEL]}" \
+                  '{name: $name, color: $color, description: $description}')" > /dev/null || \
+                echo "WARNING: Failed to create label '${LABEL}'"
+            fi
+          done
+
+      - name: Create Gitea issues from Sonar findings
+        if: always() && env.SONAR_CONFIGURED == 'true'
+        env:
+          GITEA_TOKEN: ${{ github.token }}
+        run: |
+          type_label() {
+            case "$1" in
+              BUG)              echo "sonar: bug" ;;
+              VULNERABILITY)    echo "sonar: vulnerability" ;;
+              SECURITY_HOTSPOT) echo "sonar: security hotspot" ;;
+              *)                echo "sonar: code smell" ;;
+            esac
+          }
+
+          severity_label() {
+            case "$1" in
+              BLOCKER)  echo "sonar: blocker" ;;
+              CRITICAL) echo "sonar: critical" ;;
+              MAJOR)    echo "sonar: major" ;;
+              MINOR)    echo "sonar: minor" ;;
+              *)        echo "sonar: info" ;;
+            esac
+          }
+
+          REPO_FULL="${{ github.repository }}"
+          REPO_OWNER="${REPO_FULL%%/*}"
+          REPO_NAME="${REPO_FULL##*/}"
+          GITEA_API_URL="${GITHUB_SERVER_URL%/}/api/v1"
+          SONAR_ISSUE_URL_BASE="${SONAR_URL%/}/project/issues?id=${SONAR_PROJECT_KEY:-cuemarshal}&open="
+          EXISTING_LABELS=$(curl -sf \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            "${GITEA_API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/labels?limit=100")
+
+          label_id() {
+            echo "${EXISTING_LABELS}" | jq -r --arg name "$1" '.[] | select(.name == $name) | .id' | head -n 1
+          }
+
+          has_existing_issue() {
+            local sonar_key="$1"
+            local marker="Sonar Key: \`${sonar_key}\`"
+            local page=1
+
+            while true; do
+              response=$(curl -sf \
+                -H "Authorization: token ${GITEA_TOKEN}" \
+                "${GITEA_API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/issues?state=open&type=issues&page=${page}&limit=50")
+
+              count=$(echo "${response}" | jq 'length')
+              if [ "${count}" -eq 0 ]; then
+                return 1
+              fi
+
+              if echo "${response}" | jq -e --arg marker "${marker}" '.[] | select((.body // "") | contains($marker))' > /dev/null; then
+                return 0
+              fi
+
+              if [ "${count}" -lt 50 ]; then
+                return 1
+              fi
+
+              page=$((page + 1))
+            done
+          }
+
+          SONAR_LABEL_ID=$(label_id "sonar")
+          SOURCE_LABEL_ID=$(label_id "source:sonar")
+
+          if [ -z "${SONAR_LABEL_ID}" ] || [ -z "${SOURCE_LABEL_ID}" ]; then
+            echo "ERROR: Required Sonar labels could not be resolved"
+            exit 1
+          fi
+
+          PAGE=1
+          PAGE_SIZE=100
+          TOTAL=1
+          CREATED=0
+          SKIPPED=0
+
+          while [ $(((PAGE - 1) * PAGE_SIZE)) -lt "${TOTAL}" ]; do
+            RESPONSE=$(curl -sf -u "${SONAR_TOKEN}:" \
+              "${SONAR_URL}/api/issues/search?componentKeys=${SONAR_PROJECT_KEY:-cuemarshal}&statuses=OPEN,CONFIRMED,REOPENED&resolved=false&p=${PAGE}&ps=${PAGE_SIZE}")
+
+            TOTAL=$(echo "${RESPONSE}" | jq -r '.total // 0')
+            ISSUES=$(echo "${RESPONSE}" | jq -c '.issues[]?')
+
+            while IFS= read -r issue; do
+              [ -z "${issue}" ] && continue
+
+              KEY=$(echo "${issue}" | jq -r '.key')
+              SEVERITY=$(echo "${issue}" | jq -r '.severity // "INFO"')
+              TYPE=$(echo "${issue}" | jq -r '.type // "CODE_SMELL"')
+              MESSAGE=$(echo "${issue}" | jq -r '.message // "No message"')
+              COMPONENT=$(echo "${issue}" | jq -r '.component // ""' | sed "s/^${SONAR_PROJECT_KEY:-cuemarshal}://")
+              LINE=$(echo "${issue}" | jq -r '.line // "N/A"')
+              RULE=$(echo "${issue}" | jq -r '.rule // ""')
+
+              if has_existing_issue "${KEY}"; then
+                echo "Skipping existing Gitea issue for Sonar key ${KEY}"
+                SKIPPED=$((SKIPPED + 1))
+                continue
+              fi
+
+              TYPE_LABEL=$(type_label "${TYPE}")
+              SEVERITY_LABEL=$(severity_label "${SEVERITY}")
+              TYPE_LABEL_ID=$(label_id "${TYPE_LABEL}")
+              SEVERITY_LABEL_ID=$(label_id "${SEVERITY_LABEL}")
+
+              if [ -z "${TYPE_LABEL_ID}" ] || [ -z "${SEVERITY_LABEL_ID}" ]; then
+                echo "WARNING: Missing label IDs for Sonar key ${KEY}; skipping"
+                SKIPPED=$((SKIPPED + 1))
+                continue
+              fi
+
+              LABEL_IDS=$(jq -cn \
+                --argjson sonar "${SONAR_LABEL_ID}" \
+                --argjson source "${SOURCE_LABEL_ID}" \
+                --argjson type "${TYPE_LABEL_ID}" \
+                --argjson severity "${SEVERITY_LABEL_ID}" \
+                '[ $sonar, $source, $type, $severity ]')
+
+              BODY=$(printf '%s\n' \
+                '**SonarQube Finding**' \
+                '' \
+                "Sonar Key: \`${KEY}\`" \
+                '' \
+                '| Field | Value |' \
+                '|-------|-------|' \
+                "| Key | \`${KEY}\` |" \
+                "| Severity | ${SEVERITY} |" \
+                "| Type | ${TYPE} |" \
+                "| Rule | \`${RULE}\` |" \
+                "| File | \`${COMPONENT}\` |" \
+                "| Line | ${LINE} |" \
+                '' \
+                "**Message:** ${MESSAGE}" \
+                '' \
+                "**SonarQube Link:** ${SONAR_ISSUE_URL_BASE}${KEY}")
+
+              TITLE="[Sonar] ${SEVERITY}: ${MESSAGE}"
+
+              curl -sf -X POST \
+                -H "Authorization: token ${GITEA_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "${GITEA_API_URL}/repos/${REPO_OWNER}/${REPO_NAME}/issues" \
+                -d "$(jq -cn \
+                  --arg title "${TITLE}" \
+                  --arg body "${BODY}" \
+                  --argjson labels "${LABEL_IDS}" \
+                  '{title: $title, body: $body, labels: $labels}')" > /dev/null
+
+              echo "Created Gitea issue for Sonar key ${KEY}"
+              CREATED=$((CREATED + 1))
+            done <<< "${ISSUES}"
+
+            PAGE=$((PAGE + 1))
+          done
+
+          echo "Sonar issue sync complete: created=${CREATED}, skipped=${SKIPPED}, total=${TOTAL}"
