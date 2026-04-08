@@ -13,6 +13,9 @@ import { config } from "../config.js";
 import { selfImprovementService } from "../services/self-improvement.js";
 import { projectPlanner } from "../services/project-planner.js";
 import { validateBearerToken } from "../middleware/auth.js";
+import { isSonarFinding } from "../utils/issue-classification.js";
+import { workflowTrigger } from "../services/workflow-trigger.js";
+import { giteaClient } from "../services/gitea-client.js";
 
 
 const router = Router();
@@ -764,12 +767,22 @@ router.post("/self-improve/check", validateBearerToken, async (req, res): Promis
  */
 router.post("/self-improve/trigger", validateBearerToken, async (req, res): Promise<void> => {
   try {
-    const { owner, repo } = req.body;
+    const TriggerSchema = z.object({
+      owner: z.string().min(1),
+      repo: z.string().min(1),
+      source: z.enum(["sonar_backlog", "self_findings"]).optional(),
+    });
+    const parsed = TriggerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      return;
+    }
+    const { owner, repo, source } = parsed.data;
     if (!owner || !repo) {
       res.status(400).json({ error: "Missing required fields: owner, repo" });
       return;
     }
-    const result = await selfImprovementService.triggerImprovement(owner, repo);
+    const result = await selfImprovementService.triggerImprovement(owner, repo, { source });
     if (result.success) {
       res.json(result);
     } else {
@@ -777,6 +790,60 @@ router.post("/self-improve/trigger", validateBearerToken, async (req, res): Prom
     }
   } catch (error) {
     logger.error({ error }, "Failed to trigger self-improvement");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
+/**
+ * POST /api/internal/self-improve/route-sonar
+ * Called by self-improve workflow to route a selected Sonar issue via normal task execution.
+ * PROTECTED: requires bearer token
+ */
+const RouteSonarIssueSchema = z.object({
+  owner: z.string().min(1),
+  repo: z.string().min(1),
+  issue_number: z.number().int().positive(),
+  model_tier: z.string().default("tier2"),
+});
+
+router.post("/self-improve/route-sonar", validateBearerToken, async (req, res): Promise<void> => {
+  try {
+    const parsed = RouteSonarIssueSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      return;
+    }
+
+    const { owner, repo, issue_number, model_tier } = parsed.data;
+    const { giteaClient } = await import("../services/gitea-client.js");
+    const { agentRouter } = await import("../services/agent-router.js");
+    const issue: any = await giteaClient.getIssue(owner, repo, issue_number);
+    const labels = (issue.labels || []).map((l: any) => l.name);
+    if (!isSonarFinding({ labels, body: issue.body || "" })) {
+      res.status(409).json({ success: false, error: "Issue is not classified as sonar backlog" });
+      return;
+    }
+    if (Array.isArray(issue.assignees) && issue.assignees.length > 0) {
+      res.status(409).json({ success: false, error: "Issue is already assigned" });
+      return;
+    }
+
+    await agentRouter.routeTask({
+      owner,
+      repo,
+      issueNumber: issue_number,
+      issueTitle: issue.title || `Issue #${issue_number}`,
+      issueBody: issue.body || "",
+      labels: labels.includes("role:developer") ? labels : [...labels, "role:developer"],
+    });
+
+    logger.info(
+      { owner, repo, issue: issue_number, modelTier: model_tier },
+      "Sonar issue routed via self-improvement endpoint"
+    );
+    res.json({ success: true });
+  } catch (error) {
+    logger.error({ error }, "Failed to route Sonar issue from self-improvement");
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
@@ -809,6 +876,190 @@ router.post("/self-improve/completed", validateBearerToken, async (req, res): Pr
   } catch (error) {
     logger.error({ error }, "Failed to process self-improvement completion");
     res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
+const ReexecuteFailedBranchesSchema = z.object({
+  owner: z.string().min(1),
+  repo: z.string().min(1),
+  limit: z.number().int().positive().max(200).default(20),
+  dry_run: z.boolean().default(true),
+  priority_mode: z.enum(["oldest-first", "highest-priority-first"]).default("oldest-first"),
+});
+
+router.post("/recovery/reexecute-failed-branches", validateBearerToken, async (req, res): Promise<void> => {
+  try {
+    const parsed = ReexecuteFailedBranchesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      return;
+    }
+
+    const { owner, repo, limit, dry_run, priority_mode } = parsed.data;
+    const repoFull = `${owner}/${repo}`;
+    const taskRows = await db.select().from(tasks).where(eq(tasks.giteaRepo, repoFull));
+    const candidates = taskRows
+      .filter((t) => (t.status === "pending" || t.status === "failed") && t.branchName)
+      .sort((a, b) => {
+        if (priority_mode === "highest-priority-first") {
+          const aRetry = a.retryCount || 0;
+          const bRetry = b.retryCount || 0;
+          return bRetry - aRetry || a.updatedAt.getTime() - b.updatedAt.getTime();
+        }
+        return a.updatedAt.getTime() - b.updatedAt.getTime();
+      })
+      .slice(0, limit);
+
+    const openPullsResult = await giteaClient.listPullRequests(owner, repo, { state: "open", limit: 100 });
+    const openPulls: any[] = Array.isArray(openPullsResult) ? openPullsResult : [];
+    const openBranchSet = new Set(
+      openPulls
+        .map((pr: any) => pr?.head?.ref)
+        .filter((ref: unknown): ref is string => typeof ref === "string" && ref.length > 0)
+    );
+
+    const results = {
+      dry_run,
+      repo: repoFull,
+      candidates: [] as Array<{ task_id: string; issue_number: number; branch_name: string }>,
+      skipped: [] as Array<{ task_id: string; issue_number: number; reason: string }>,
+      dispatched: [] as Array<{ task_id: string; issue_number: number; branch_name: string }>,
+    };
+
+    for (const task of candidates) {
+      const branchName = task.branchName!;
+      const issue: any = await giteaClient.getIssue(owner, repo, task.giteaIssueId);
+      if (issue?.state !== "open") {
+        results.skipped.push({ task_id: task.id, issue_number: task.giteaIssueId, reason: "issue_closed" });
+        continue;
+      }
+      if (openBranchSet.has(branchName)) {
+        results.skipped.push({ task_id: task.id, issue_number: task.giteaIssueId, reason: "open_pr_exists" });
+        continue;
+      }
+
+      results.candidates.push({ task_id: task.id, issue_number: task.giteaIssueId, branch_name: branchName });
+      if (dry_run) continue;
+
+      await workflowTrigger.dispatchTaskExecution({
+        owner,
+        repo,
+        issueNumber: task.giteaIssueId,
+        agentRole: task.agentRole || "developer",
+        modelTier: task.currentTier || task.modelTier || "tier2",
+        branchName,
+      });
+      await giteaClient.addComment(
+        owner,
+        repo,
+        task.giteaIssueId,
+        "🔁 **Recovery dispatch initiated** from stored task branch."
+      );
+      results.dispatched.push({ task_id: task.id, issue_number: task.giteaIssueId, branch_name: branchName });
+    }
+
+    res.json(results);
+  } catch (error) {
+    logger.error({ error }, "Failed to re-execute failed branches");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+const CleanupImportedProjectSchema = z.object({
+  owner: z.string().min(1),
+  repo: z.string().min(1),
+  mode: z.enum(["reimport", "reconcile"]).default("reconcile"),
+  limit: z.number().int().positive().max(500).default(100),
+  dry_run: z.boolean().default(true),
+  before_timestamp: z.string().datetime().optional(),
+});
+
+router.post("/recovery/cleanup-imported-project", validateBearerToken, async (req, res): Promise<void> => {
+  try {
+    const parsed = CleanupImportedProjectSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      return;
+    }
+
+    const { owner, repo, mode, limit, dry_run, before_timestamp } = parsed.data;
+    const repoFull = `${owner}/${repo}`;
+    const beforeDate = before_timestamp ? new Date(before_timestamp) : null;
+
+    if (mode === "reimport") {
+      res.json({
+        dry_run,
+        repo: repoFull,
+        mode,
+        actions: [],
+        message: "Re-import mode requires operator-driven execution; this endpoint provides planning metadata only.",
+      });
+      return;
+    }
+
+    const openIssuesResult = await giteaClient.listIssues(owner, repo, { state: "open", limit: 200 });
+    const openIssues: any[] = Array.isArray(openIssuesResult) ? openIssuesResult : [];
+    const repoTasks = await db.select().from(tasks).where(eq(tasks.giteaRepo, repoFull));
+    const staleTasks = repoTasks.filter((t) => {
+      const staleByTime = !beforeDate || (t.createdAt && t.createdAt <= beforeDate);
+      return staleByTime && (t.status === "pending" || t.status === "failed" || t.status === "in_progress");
+    });
+    const staleIssueIds = new Set(staleTasks.map((t) => t.giteaIssueId));
+
+    const candidates = openIssues
+      .filter((issue: any) => {
+        const labels = (issue.labels || []).map((l: any) => l.name);
+        const assignedToBot = Array.isArray(issue.assignees) && issue.assignees.some((a: any) => a.login === "cuemarshal-bot");
+        return assignedToBot && staleIssueIds.has(issue.number) && isSonarFinding({ labels, body: issue.body || "" });
+      })
+      .slice(0, limit);
+
+    const result = {
+      dry_run,
+      repo: repoFull,
+      mode,
+      stale_issue_candidates: candidates.map((issue: any) => ({
+        issue_number: issue.number,
+        title: issue.title,
+      })),
+      stale_task_candidates: staleTasks
+        .filter((t) => candidates.some((issue: any) => issue.number === t.giteaIssueId))
+        .map((t) => ({ task_id: t.id, issue_number: t.giteaIssueId, status: t.status })),
+      actions_taken: [] as Array<{ issue_number: number; action: string }>,
+    };
+
+    if (dry_run) {
+      res.json(result);
+      return;
+    }
+
+    for (const issue of candidates) {
+      await giteaClient.updateIssue(owner, repo, issue.number, { assignees: [] });
+      await giteaClient.addComment(
+        owner,
+        repo,
+        issue.number,
+        "🧹 **Automation cleanup applied**: stale pre-fix assignment/task state has been reset for reclassification."
+      );
+      result.actions_taken.push({ issue_number: issue.number, action: "assignment_cleared" });
+    }
+
+    const candidateIssueIds = new Set(candidates.map((issue: any) => issue.number));
+    const tasksToArchive = staleTasks.filter((task) => candidateIssueIds.has(task.giteaIssueId));
+    for (const task of tasksToArchive) {
+      await db.update(tasks)
+        .set({
+          status: "failed",
+          progressMessage: "Archived by imported-project cleanup reconcile",
+          updatedAt: new Date(),
+        })
+        .where(eq(tasks.id, task.id));
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error({ error }, "Failed to clean up imported project");
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

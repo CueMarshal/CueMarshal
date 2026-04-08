@@ -7,20 +7,45 @@ on:
         description: 'Correlation ID for tracing'
         required: false
         default: ''
+      source:
+        description: 'Self-improvement source lane'
+        required: false
+        default: 'self_findings'
+      target_owner:
+        description: 'Target owner for sonar backlog execution'
+        required: false
+        default: ''
+      target_repo:
+        description: 'Target repo for sonar backlog execution'
+        required: false
+        default: ''
+      target_issue_number:
+        description: 'Target issue number for sonar backlog execution'
+        required: false
+        default: ''
 
 env:
   GITEA_URL: ${{ secrets.SCM_URL }}
   GITEA_TOKEN: ${{ secrets.SCM_TOKEN }}
   OPENAI_API_KEY: ${{ secrets.GATEWAY_API_KEY }}
   LOCAL_ENDPOINT: http://127.0.0.1:4101
+  CONDUCTOR_URL: ${{ secrets.CONDUCTOR_URL }}
+  CONDUCTOR_SECRET: ${{ secrets.CONDUCTOR_SECRET }}
 
 jobs:
   discover:
     runs-on: [self-hosted, opencode]
     timeout-minutes: 30
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git config --local http.extraHeader "Authorization: token ${GITHUB_TOKEN}"
+          git fetch origin "${GITHUB_REF_NAME}" --depth=1
+          git checkout FETCH_HEAD
 
       - name: Set correlation ID
         run: |
@@ -30,8 +55,38 @@ jobs:
           fi
           echo "CORRELATION_ID=$CORR_ID" >> $GITHUB_ENV
           echo "event=self_improve.workflow_started correlationId=$CORR_ID timestamp=$(date -Iseconds)"
+          echo "SOURCE=${{ github.event.inputs.source }}" >> $GITHUB_ENV
+
+      - name: Route Sonar backlog issue via Conductor
+        if: github.event.inputs.source == 'sonar_backlog'
+        run: |
+          if [ -z "${{ github.event.inputs.target_owner }}" ] || [ -z "${{ github.event.inputs.target_repo }}" ] || [ -z "${{ github.event.inputs.target_issue_number }}" ]; then
+            echo "ERROR: sonar_backlog source requires target_owner, target_repo, and target_issue_number"
+            exit 1
+          fi
+
+          echo "Routing Sonar backlog issue ${{ github.event.inputs.target_owner }}/${{ github.event.inputs.target_repo }}#${{ github.event.inputs.target_issue_number }}"
+          HTTP_CODE=$(curl -s -o /tmp/route-sonar-response.json -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${CONDUCTOR_SECRET}" \
+            -H "Content-Type: application/json" \
+            "${CONDUCTOR_URL}/api/internal/self-improve/route-sonar" \
+            -d "{\"owner\":\"${{ github.event.inputs.target_owner }}\",\"repo\":\"${{ github.event.inputs.target_repo }}\",\"issue_number\":${{ github.event.inputs.target_issue_number }},\"model_tier\":\"tier2\"}")
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "SONAR_ROUTED=true" >> $GITHUB_ENV
+          elif [ "$HTTP_CODE" = "409" ]; then
+            echo "No runnable sonar candidate (already assigned or non-sonar after re-check)."
+            echo "SONAR_ROUTED=false" >> $GITHUB_ENV
+          else
+            echo "ERROR: route-sonar request failed with HTTP $HTTP_CODE"
+            cat /tmp/route-sonar-response.json || true
+            exit 1
+          fi
+
+          echo "SKIP_PRIORITIZE=true" >> $GITHUB_ENV
 
       - name: Configure self-improvement identity and credentials
+        if: github.event.inputs.source != 'sonar_backlog'
         run: |
           git config user.name "agent-architect"
           git config user.email "architect@cuemarshal.local"
@@ -43,10 +98,12 @@ jobs:
           echo "GITEA_TOKEN=${GITEA_TOKEN}" >> $GITHUB_ENV
 
       - name: Install scanner dependencies
+        if: github.event.inputs.source != 'sonar_backlog'
         run: |
           which jq || (echo "jq is required but not installed" && exit 1)
 
       - name: Run improvement scanners
+        if: github.event.inputs.source != 'sonar_backlog'
         env:
           SONAR_URL: ${{ secrets.SONAR_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -73,6 +130,7 @@ jobs:
           jq '.summary' improvement-findings.json
 
       - name: Configure architect agent
+        if: github.event.inputs.source != 'sonar_backlog'
         run: |
           cp /agents/architect/opencode-selfimprove.json ./opencode.json
           cp -r /agents/architect/.opencode ./.opencode 2>/dev/null || true
@@ -85,6 +143,7 @@ jobs:
           fi
 
       - name: Debug environment
+        if: github.event.inputs.source != 'sonar_backlog'
         run: |
           if [ -n "$GITEA_TOKEN" ]; then
             echo "GITEA_TOKEN is set"
@@ -99,6 +158,7 @@ jobs:
           fi
 
       - name: Ensure required labels exist
+        if: github.event.inputs.source != 'sonar_backlog'
         run: |
           REPO_FULL="${{ github.repository }}"
           REPO_OWNER="${REPO_FULL%%/*}"
@@ -131,6 +191,7 @@ jobs:
           done
 
       - name: Pre-filter top findings
+        if: github.event.inputs.source != 'sonar_backlog'
         run: |
           MAX="3"
           TOP_N="10"
@@ -166,7 +227,7 @@ jobs:
           echo "Findings included: $(jq '.findings | length' top-findings.json)"
 
       - name: Prioritize and create improvement issues
-        if: env.SKIP_PRIORITIZE != 'true'
+        if: github.event.inputs.source != 'sonar_backlog' && env.SKIP_PRIORITIZE != 'true'
         run: |
           echo "event=self_improve.opencode_executed correlationId=${{ env.CORRELATION_ID }}"
           
@@ -203,7 +264,36 @@ jobs:
           - Skip findings that are too vague or would require significant architectural changes
           " --model "litellm/tier1"
 
-      - name: Log workflow completion
+      - name: Report cycle outcome to Conductor
         if: always()
         run: |
           echo "event=self_improve.cycle_completed correlationId=${{ env.CORRELATION_ID }} status=${{ job.status }}"
+
+          # Determine outcome
+          if [ "${{ job.status }}" = "failure" ]; then
+            OUTCOME="failed"
+            ISSUES_CREATED=0
+          elif [ "${SONAR_ROUTED:-}" = "true" ]; then
+            OUTCOME="work_produced"
+            ISSUES_CREATED=1
+          elif [ "${SKIP_PRIORITIZE:-}" = "true" ]; then
+            OUTCOME="no_findings"
+            ISSUES_CREATED=0
+          else
+            OUTCOME="work_produced"
+            ISSUES_CREATED="${MAX:-0}"
+          fi
+
+          echo "Reporting outcome=$OUTCOME to Conductor..."
+
+          if [ -n "${CONDUCTOR_URL}" ] && [ -n "${CONDUCTOR_SECRET}" ]; then
+            curl -sf -X POST \
+              -H "Authorization: Bearer ${CONDUCTOR_SECRET}" \
+              -H "Content-Type: application/json" \
+              "${CONDUCTOR_URL}/api/internal/self-improve/completed" \
+              -d "{\"outcome\": \"${OUTCOME}\", \"correlation_id\": \"${{ env.CORRELATION_ID }}\", \"issues_created\": ${ISSUES_CREATED}}" \
+              && echo "✓ Outcome reported successfully" \
+              || echo "WARNING: Failed to report outcome (non-fatal)"
+          else
+            echo "WARNING: CONDUCTOR_URL or CONDUCTOR_SECRET not set, skipping outcome report"
+          fi

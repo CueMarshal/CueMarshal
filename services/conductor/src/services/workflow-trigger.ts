@@ -60,13 +60,25 @@ export class WorkflowTrigger {
   async triggerSelfImprovement(
     owner: string,
     repo: string,
-    options: { source: string; reason: string; force?: boolean; correlationId?: string }
+    options: {
+      source: string;
+      reason: string;
+      force?: boolean;
+      correlationId?: string;
+      targetOwner?: string;
+      targetRepo?: string;
+      targetIssueNumber?: number;
+    }
   ): Promise<{ triggered: boolean; message: string }> {
     try {
       await giteaClient.dispatchWorkflow(owner, repo, SELF_IMPROVE_WORKFLOW, {
         ref: "main",
         inputs: {
           correlation_id: options.correlationId || "",
+          source: options.source,
+          target_owner: options.targetOwner || "",
+          target_repo: options.targetRepo || "",
+          target_issue_number: options.targetIssueNumber ? String(options.targetIssueNumber) : "",
         },
       });
       logger.info({ repo: `${owner}/${repo}`, source: options.source }, "Self-improvement triggered via workflow_dispatch");

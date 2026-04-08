@@ -19,6 +19,7 @@ import { giteaClient } from "../services/gitea-client.js";
 import { db } from "../db/client.js";
 import { projects } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { isSonarFinding } from "../utils/issue-classification.js";
 
 const router = Router();
 
@@ -180,6 +181,19 @@ async function handleIssueOpened(payload: any) {
   }
 
   const [owner, repoName] = repo.full_name.split("/");
+  const issueLabels: string[] = issue.labels?.map((l: any) => l.name) || [];
+  const sonarIssue = isSonarFinding({
+    labels: issueLabels,
+    body: issue.body || "",
+  });
+
+  if (sonarIssue) {
+    logger.info(
+      { repo: `${owner}/${repoName}`, issue: issue.number },
+      "Sonar issue detected - excluded from main-cycle routing"
+    );
+    return;
+  }
 
   await enqueueTaskAnalyze({
     owner,
@@ -187,7 +201,7 @@ async function handleIssueOpened(payload: any) {
     issueNumber: issue.number,
     issueTitle: issue.title,
     issueBody: issue.body || "",
-    labels: issue.labels?.map((l: any) => l.name) || [],
+    labels: issueLabels,
   });
 
   // Pause self-improvement if this is a project task (not self-improvement)
@@ -206,9 +220,14 @@ async function handleIssueLabeled(payload: any) {
   const issue = payload.issue;
   const repo = payload.repository;
   const newLabel = payload.label;
+  const labels: string[] = issue.labels?.map((l: any) => l.name) || [];
+  const sonarIssue = isSonarFinding({
+    labels,
+    body: issue.body || "",
+  });
 
   // If a role label was added, re-route the task
-  if (newLabel.name.startsWith("role:")) {
+  if (newLabel.name.startsWith("role:") && !sonarIssue) {
     const [owner, repoName] = repo.full_name.split("/");
 
     await enqueueTaskRoute({
@@ -217,7 +236,7 @@ async function handleIssueLabeled(payload: any) {
       issueNumber: issue.number,
       issueTitle: issue.title,
       issueBody: issue.body || "",
-      labels: issue.labels?.map((l: any) => l.name) || [],
+      labels,
     });
   }
 }

@@ -19,6 +19,7 @@ import { sql, gte, eq } from "drizzle-orm";
 import { acquireLock, releaseLock, getTTL, setWithTTL, get as redisGet, del as redisDel } from "../utils/redis-client.js";
 import { tasksQueue, reviewsQueue, workflowsQueue } from "../queue/jobs.js";
 import { giteaClient } from "./gitea-client.js";
+import { isSonarFinding } from "../utils/issue-classification.js";
 
 
 // Redis keys (PLAN-01)
@@ -42,6 +43,22 @@ interface SelfImproveFailure {
   timestamp: Date;
   correlationId: string;
   reason: string;
+}
+
+export interface SonarBacklogCandidate {
+  owner: string;
+  repo: string;
+  issueNumber: number;
+}
+
+function scoreSonarIssue(issue: any): number {
+  const labels = (issue.labels || []).map((l: any) => String(l.name || "").toLowerCase());
+  if (labels.includes("severity:blocker")) return 100;
+  if (labels.includes("severity:critical")) return 90;
+  if (labels.includes("severity:major")) return 70;
+  if (labels.includes("severity:minor")) return 50;
+  if (labels.includes("severity:info")) return 30;
+  return 40;
 }
 
 function resolveGiteaToken(): string {
@@ -157,8 +174,15 @@ export class SelfImprovementService {
 
         const openIssuesResult = await giteaClient.listIssues(owner, repo, { state: "open" });
         const openIssues: any[] = Array.isArray(openIssuesResult) ? openIssuesResult : [];
-        if (openIssues.length > 0) {
-          logger.debug({ project: project.giteaRepo, openIssues: openIssues.length }, "Project has outstanding tasks");
+        const nonSonarOpenIssues = openIssues.filter((issue: any) => {
+          const labels = (issue.labels || []).map((l: any) => l.name);
+          return !isSonarFinding({ labels, body: issue.body || "" });
+        });
+        if (nonSonarOpenIssues.length > 0) {
+          logger.debug(
+            { project: project.giteaRepo, nonSonarOpenIssues: nonSonarOpenIssues.length },
+            "Project has outstanding non-Sonar tasks"
+          );
           return true;
         }
       }
@@ -168,6 +192,64 @@ export class SelfImprovementService {
       logger.error({ error }, "Failed to check outstanding project tasks");
       // Fail safe: assume there are outstanding tasks if check fails
       return true;
+    }
+  }
+
+  async findNextSonarBacklogCandidate(): Promise<SonarBacklogCandidate | null> {
+    try {
+      const activeProjects = await db.query.projects.findMany({
+        where: eq(projects.status, "active"),
+      });
+
+      const perRepoCandidates: Array<{
+        owner: string;
+        repo: string;
+        issueNumber: number;
+        score: number;
+        createdAt: number;
+      }> = [];
+
+      for (const project of activeProjects) {
+        const [owner, repo] = project.giteaRepo.split("/");
+        if (!owner || !repo) continue;
+
+        if (repo === config.conductorRepo && owner === config.conductorOrg) {
+          continue;
+        }
+
+        const issuesResult = await giteaClient.listIssues(owner, repo, { state: "open" });
+        const issues: any[] = Array.isArray(issuesResult) ? issuesResult : [];
+
+        const repoCandidates = issues.filter((issue: any) => {
+          const labels = (issue.labels || []).map((l: any) => l.name);
+          const hasSkipLabel = labels.includes("skip-automation") || labels.includes("manual-only") || labels.includes("needs-human-review");
+          const hasAssignee = Array.isArray(issue.assignees) && issue.assignees.length > 0;
+          return !hasSkipLabel && !hasAssignee && isSonarFinding({ labels, body: issue.body || "" });
+        });
+        if (repoCandidates.length > 0) {
+          const topRepoCandidate = repoCandidates
+            .map((issue: any) => ({
+              issueNumber: issue.number,
+              score: scoreSonarIssue(issue),
+              createdAt: Date.parse(issue.created_at || issue.createdAt || new Date().toISOString()),
+            }))
+            .sort((a, b) => b.score - a.score || a.createdAt - b.createdAt)[0];
+          perRepoCandidates.push({ owner, repo, ...topRepoCandidate });
+        }
+      }
+
+      if (perRepoCandidates.length === 0) return null;
+
+      const selected = perRepoCandidates
+        .sort((a, b) => b.score - a.score || a.createdAt - b.createdAt)[0];
+      return {
+        owner: selected.owner,
+        repo: selected.repo,
+        issueNumber: selected.issueNumber,
+      };
+    } catch (error) {
+      logger.error({ error }, "Failed to find Sonar backlog candidate");
+      return null;
     }
   }
 
@@ -358,7 +440,11 @@ export class SelfImprovementService {
   /**
    * Trigger self-improvement with idempotency protection (PLAN-01 orchestration API)
    */
-  async triggerImprovement(owner: string, repo: string): Promise<{ success: boolean; reason?: string }> {
+  async triggerImprovement(
+    owner: string,
+    repo: string,
+    options?: { source?: "sonar_backlog" | "self_findings" }
+  ): Promise<{ success: boolean; reason?: string }> {
     const lockTTL = 300;
     const lockAcquired = await acquireLock(SELF_IMPROVE_LOCK_KEY, lockTTL);
 
@@ -377,10 +463,18 @@ export class SelfImprovementService {
 
       logger.info({ owner, repo }, "Triggering self-improvement workflow");
 
+      const sonarCandidate = await this.findNextSonarBacklogCandidate();
+      const source = options?.source || (sonarCandidate ? "sonar_backlog" : "self_findings");
+      const shouldUseSonarCandidate = source === "sonar_backlog" && sonarCandidate;
       const result = await workflowTrigger.triggerSelfImprovement(owner, repo, {
-        source: "idle-check",
-        reason: "scheduled self-improvement cycle",
+        source,
+        reason: shouldUseSonarCandidate
+          ? `scheduled self-improvement cycle (sonar backlog issue #${sonarCandidate.issueNumber})`
+          : "scheduled self-improvement cycle",
         force: false,
+        targetOwner: shouldUseSonarCandidate ? sonarCandidate.owner : undefined,
+        targetRepo: shouldUseSonarCandidate ? sonarCandidate.repo : undefined,
+        targetIssueNumber: shouldUseSonarCandidate ? sonarCandidate.issueNumber : undefined,
       });
 
       if (result.triggered) {
