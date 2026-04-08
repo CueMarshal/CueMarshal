@@ -43,6 +43,35 @@ interface DispatchTestsInput {
 }
 
 export class WorkflowTrigger {
+  private isBranchAlreadyExistsError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    return error.message.includes("Gitea API error (409)") &&
+      error.message.includes("The branch already exists");
+  }
+
+  private async ensureTaskBranch(owner: string, repo: string, branchName: string): Promise<void> {
+    try {
+      await giteaClient.createBranch(owner, repo, {
+        new_branch_name: branchName,
+        old_branch_name: "main",
+      });
+      return;
+    } catch (error) {
+      if (!this.isBranchAlreadyExistsError(error)) {
+        throw error;
+      }
+
+      await giteaClient.getBranch(owner, repo, branchName);
+      logger.info(
+        { repo: `${owner}/${repo}`, branch: branchName },
+        "Reusing existing task branch for workflow dispatch"
+      );
+    }
+  }
+
   async triggerSelfImprovement(
     owner: string,
     repo: string,
@@ -64,10 +93,7 @@ export class WorkflowTrigger {
   }
 
   async dispatchTaskExecution(input: DispatchTaskExecutionInput): Promise<void> {
-    await giteaClient.createBranch(input.owner, input.repo, {
-      new_branch_name: input.branchName,
-      old_branch_name: "main",
-    });
+    await this.ensureTaskBranch(input.owner, input.repo, input.branchName);
 
     await giteaClient.dispatchWorkflow(input.owner, input.repo, TASK_EXECUTE_WORKFLOW, {
       ref: input.branchName,
