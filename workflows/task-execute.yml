@@ -36,7 +36,7 @@ jobs:
           git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git config --local http.extraHeader "Authorization: token ${GITHUB_TOKEN}"
           git fetch origin "${GITHUB_REF_NAME}" --depth=1
-          git checkout FETCH_HEAD
+          git checkout -B "${GITHUB_REF_NAME}" FETCH_HEAD
 
       - name: Configure agent and credentials
         run: |
