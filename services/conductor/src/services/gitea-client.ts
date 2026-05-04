@@ -317,6 +317,41 @@ export class GiteaClient {
     return this.request("POST", `/repos/${owner}/${repo}/branches`, data);
   }
 
+  async createBranchIfMissing(owner: string, repo: string, data: {
+    new_branch_name: string;
+    old_branch_name?: string;
+  }) {
+    this.ensureToken();
+    const url = `${this.baseUrl}/api/v1/repos/${owner}/${repo}/branches`;
+    const headers: Record<string, string> = {
+      Authorization: `token ${this.token}`,
+      "Content-Type": "application/json",
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(data),
+    });
+
+    if (response.ok) {
+      return { created: true, branch: await response.json() };
+    }
+
+    if (response.status === 409) {
+      const body = await response.text();
+      if (body.includes("The branch already exists")) {
+        const branch = await this.getBranch(owner, repo, data.new_branch_name);
+        return { created: false, branch };
+      }
+      throw new Error(`Gitea API error (${response.status}): ${body}`);
+    }
+
+    const error = await response.text();
+    logger.error({ method: "POST", path: `/repos/${owner}/${repo}/branches`, status: response.status, error }, "Gitea API request failed");
+    throw new Error(`Gitea API error (${response.status}): ${error}`);
+  }
+
   async getBranch(owner: string, repo: string, branch: string) {
     return this.request("GET", `/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}`);
   }

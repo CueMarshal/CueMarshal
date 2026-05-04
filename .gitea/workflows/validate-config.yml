@@ -25,20 +25,12 @@ jobs:
     timeout-minutes: 5
     
     steps:
-      - name: Checkout
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          git init
-          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
-          git config --local http.extraHeader "Authorization: token ${GITHUB_TOKEN}"
-          git fetch origin "${GITHUB_REF_NAME}" --depth=1
-          git checkout FETCH_HEAD
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Run environment validation script
         run: |
           echo "Running environment configuration validation..."
-          chmod +x ./scripts/validate-env.sh
           ./scripts/validate-env.sh
           
       - name: Check for placeholder values in .env.example

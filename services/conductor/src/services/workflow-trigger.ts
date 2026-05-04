@@ -8,7 +8,6 @@
 
 import { giteaClient } from "./gitea-client.js";
 import { logger } from "../utils/logger.js";
-import { config } from "../config.js";
 
 
 const TASK_EXECUTE_WORKFLOW = "task-execute.yml";
@@ -44,34 +43,44 @@ interface DispatchTestsInput {
 }
 
 export class WorkflowTrigger {
-  private lastTriggerTime: Map<string, Date> = new Map();
+  private async ensureTaskBranch(owner: string, repo: string, branchName: string): Promise<void> {
+    const result = await giteaClient.createBranchIfMissing(owner, repo, {
+      new_branch_name: branchName,
+      old_branch_name: "main",
+    });
+
+    if (!result.created) {
+      logger.info(
+        { repo: `${owner}/${repo}`, branch: branchName },
+        "Reusing existing task branch for workflow dispatch"
+      );
+    }
+  }
 
   async triggerSelfImprovement(
     owner: string,
     repo: string,
-    options: { source: string; reason: string; force?: boolean; correlationId?: string }
-  ): Promise<{ triggered: boolean; message: string }> {
-    const lockKey = `${owner}/${repo}/self-improve`;
-    const now = new Date();
-    const cooldownMs = config.selfImproveCooldownHours * 60 * 60 * 1000;
-
-    if (!options.force) {
-      const last = this.lastTriggerTime.get(lockKey);
-      if (last && now.getTime() - last.getTime() < cooldownMs) {
-        const remaining = Math.ceil((cooldownMs - (now.getTime() - last.getTime())) / 60000);
-        logger.info({ lockKey, remaining }, "Self-improvement trigger in cooldown");
-        return { triggered: false, message: `Cooldown active: ${remaining} minutes remaining` };
-      }
+    options: {
+      source: string;
+      reason: string;
+      force?: boolean;
+      correlationId?: string;
+      targetOwner?: string;
+      targetRepo?: string;
+      targetIssueNumber?: number;
     }
-
+  ): Promise<{ triggered: boolean; message: string }> {
     try {
       await giteaClient.dispatchWorkflow(owner, repo, SELF_IMPROVE_WORKFLOW, {
         ref: "main",
         inputs: {
           correlation_id: options.correlationId || "",
+          source: options.source,
+          target_owner: options.targetOwner || "",
+          target_repo: options.targetRepo || "",
+          target_issue_number: options.targetIssueNumber ? String(options.targetIssueNumber) : "",
         },
       });
-      this.lastTriggerTime.set(lockKey, now);
       logger.info({ repo: `${owner}/${repo}`, source: options.source }, "Self-improvement triggered via workflow_dispatch");
       return { triggered: true, message: "Self-improvement workflow triggered successfully" };
     } catch (error) {
@@ -80,16 +89,8 @@ export class WorkflowTrigger {
     }
   }
 
-  isSelfImprovementInCooldown(owner: string, repo: string): boolean {
-    const last = this.lastTriggerTime.get(`${owner}/${repo}/self-improve`);
-    return last ? Date.now() - last.getTime() < config.selfImproveCooldownHours * 3600000 : false;
-  }
-
   async dispatchTaskExecution(input: DispatchTaskExecutionInput): Promise<void> {
-    await giteaClient.createBranch(input.owner, input.repo, {
-      new_branch_name: input.branchName,
-      old_branch_name: "main",
-    });
+    await this.ensureTaskBranch(input.owner, input.repo, input.branchName);
 
     await giteaClient.dispatchWorkflow(input.owner, input.repo, TASK_EXECUTE_WORKFLOW, {
       ref: input.branchName,

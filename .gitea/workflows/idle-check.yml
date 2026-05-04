@@ -1,0 +1,54 @@
+name: Idle Check
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+
+env:
+  CONDUCTOR_URL: ${{ secrets.CONDUCTOR_URL }}
+  CONDUCTOR_SECRET: ${{ secrets.CONDUCTOR_SECRET }}
+
+jobs:
+  check:
+    runs-on: [self-hosted]
+    timeout-minutes: 5
+    steps:
+      - name: Check and trigger self-improvement via Conductor
+        run: |
+          # Extract owner and repo from github.repository
+          OWNER=$(echo "${{ github.repository }}" | cut -d'/' -f1)
+          REPO=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+
+          # Check readiness via Conductor API (PLAN-01 orchestration)
+          echo "Checking self-improvement readiness..."
+          READINESS=$(curl -sf -X POST \
+            -H "Authorization: Bearer ${CONDUCTOR_SECRET}" \
+            -H "Content-Type: application/json" \
+            "${CONDUCTOR_URL}/api/internal/self-improve/check" \
+            -d "{\"owner\": \"${OWNER}\", \"repo\": \"${REPO}\"}")
+
+          echo "Readiness response: ${READINESS}"
+
+          READY=$(echo "${READINESS}" | jq -r '.ready')
+          REASONS=$(echo "${READINESS}" | jq -r '.reasons_blocking | join(", ")')
+
+          if [ "${READY}" = "true" ]; then
+            echo "System ready, triggering self-improvement via Conductor..."
+            TRIGGER_RESULT=$(curl -sf -X POST \
+              -H "Authorization: Bearer ${CONDUCTOR_SECRET}" \
+              -H "Content-Type: application/json" \
+              "${CONDUCTOR_URL}/api/internal/self-improve/trigger" \
+              -d "{\"owner\": \"${OWNER}\", \"repo\": \"${REPO}\"}")
+            
+            echo "Trigger result: ${TRIGGER_RESULT}"
+            
+            SUCCESS=$(echo "${TRIGGER_RESULT}" | jq -r '.success')
+            if [ "${SUCCESS}" = "true" ]; then
+              echo "✓ Self-improvement triggered successfully"
+            else
+              REASON=$(echo "${TRIGGER_RESULT}" | jq -r '.reason')
+              echo "✗ Trigger failed: ${REASON}"
+            fi
+          else
+            echo "✗ Not ready: ${REASONS}"
+          fi

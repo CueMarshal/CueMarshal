@@ -30,7 +30,7 @@ CLONE_URL=""
 REPO_NAME=""
 ORG_NAME=""
 NO_PUSH=false
-GITEA_EXTERNAL_URL="${GITEA_EXTERNAL_URL:-http://localhost:3300}"
+GITEA_EXTERNAL_URL="${GITEA_EXTERNAL_URL:-http://localhost:8180/gitea}"
 TEMPLATE_REPO_URL="${TEMPLATE_REPO_URL:-https://raw.githubusercontent.com/CueMarshal/CueMarshal/main}"
 
 usage() {
@@ -198,7 +198,7 @@ fi
 # ── Step 3: Seed workflow files ──────────────────────────────────────
 echo "[3/7] Seeding workflow files (.gitea/workflows/)..."
 
-WORKFLOW_FILES="task-execute.yml code-review.yml run-tests.yml self-improve.yml idle-check.yml sonar-scan.yml validate-config.yml"
+WORKFLOW_FILES="task-execute.yml code-review.yml run-tests.yml self-improve.yml idle-check.yml sonar-scan.yml"
 SEEDED_COUNT=0
 
 for wf in ${WORKFLOW_FILES}; do

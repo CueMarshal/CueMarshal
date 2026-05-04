@@ -84,7 +84,7 @@ services:
       - USER_UID=1000
       - USER_GID=1000
       - GITEA_DOMAIN=${GITEA_DOMAIN:-localhost}
-      - GITEA_ROOT_URL=${GITEA_ROOT_URL:-http://localhost:3300/}
+      - GITEA_ROOT_URL=${GITEA_ROOT_URL:-http://localhost:8180/gitea/}
       - GITEA_SSH_DOMAIN=${GITEA_SSH_DOMAIN:-localhost}
       - GITEA_SSH_PORT=${GITEA_SSH_PORT:-2223}
       - GITEA__database__DB_TYPE=postgres
@@ -96,7 +96,6 @@ services:
       - gitea-data:/data
       - ./infrastructure/gitea/app.ini:/etc/templates/app.ini:ro
     ports:
-      - "3300:3000"
       - "2223:22"
     entrypoint:
       - /bin/sh
@@ -105,7 +104,7 @@ services:
         set -eu
         APP_INI=/data/gitea/conf/app.ini
         GITEA_DOMAIN_VALUE="${GITEA_DOMAIN:-localhost}"
-        GITEA_ROOT_URL_VALUE="${GITEA_ROOT_URL:-http://localhost:3300/}"
+        GITEA_ROOT_URL_VALUE="${GITEA_ROOT_URL:-http://localhost:8180/gitea/}"
         GITEA_SSH_DOMAIN_VALUE="${GITEA_SSH_DOMAIN:-}"
         GITEA_SSH_PORT_VALUE="${GITEA_SSH_PORT:-2223}"
         escape_sed() {

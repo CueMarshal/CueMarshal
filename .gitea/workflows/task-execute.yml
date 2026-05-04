@@ -28,15 +28,7 @@ jobs:
     runs-on: [self-hosted, opencode]
     timeout-minutes: 60
     steps:
-      - name: Checkout
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          git init
-          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
-          git config --local http.extraHeader "Authorization: token ${GITHUB_TOKEN}"
-          git fetch origin "${GITHUB_REF_NAME}" --depth=1
-          git checkout -B "${GITHUB_REF_NAME}" FETCH_HEAD
+      - uses: actions/checkout@v4
 
       - name: Configure agent and credentials
         run: |
@@ -99,11 +91,9 @@ jobs:
           echo "$ISSUE" | jq -r '.body // ""' > /tmp/issue_body.txt
 
       - name: Execute
-        env:
-          TASK_TITLE: ${{ steps.task.outputs.title }}
         run: |
           BODY=$(cat /tmp/issue_body.txt)
-          opencode run "Work on issue #${{ inputs.issue_number }}: ${TASK_TITLE}. ${BODY}" --model "litellm/${MODEL_ID}"
+          opencode run "Work on issue #${{ inputs.issue_number }}: ${{ steps.task.outputs.title }}. ${BODY}" --model "litellm/${MODEL_ID}"
 
       - name: Lint and refine
         run: |
@@ -118,25 +108,21 @@ jobs:
           fi
 
       - name: Push
-        env:
-          TASK_TITLE: ${{ steps.task.outputs.title }}
         run: |
           BRANCH="${{ inputs.branch_name }}"
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
-            git commit -m "feat(#${{ inputs.issue_number }}): ${TASK_TITLE}" || true
+            git commit -m "feat(#${{ inputs.issue_number }}): ${{ steps.task.outputs.title }}" || true
             git push origin "${BRANCH}"
           fi
 
       - name: Create Pull Request
         if: success()
         id: pr
-        env:
-          TASK_TITLE: ${{ steps.task.outputs.title }}
         run: |
           BRANCH="${{ inputs.branch_name }}"
           ISSUE_NUM="${{ inputs.issue_number }}"
-          TITLE="${TASK_TITLE}"
+          TITLE="${{ steps.task.outputs.title }}"
           ROLE="${{ inputs.agent_role }}"
 
           PR_EXISTS=$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" \
@@ -144,17 +130,16 @@ jobs:
             grep -c '"number"' || true)
 
           if [ "${PR_EXISTS}" = "0" ]; then
-            PR_PAYLOAD=$(jq -cn \
-              --arg title "feat(#${ISSUE_NUM}): ${TITLE}" \
-              --arg body "Resolves #${ISSUE_NUM}\n\nAutomated PR created by ${ROLE} agent." \
-              --arg head "${BRANCH}" \
-              --arg base "main" \
-              '{title: $title, body: $body, head: $head, base: $base}')
             PR_RESPONSE=$(curl -sf -X POST \
               -H "Authorization: token ${GITEA_TOKEN}" \
               -H "Content-Type: application/json" \
               "${GITEA_URL}/api/v1/repos/${{ github.repository }}/pulls" \
-              -d "${PR_PAYLOAD}")
+              -d "{
+                \"title\": \"feat(#${ISSUE_NUM}): ${TITLE}\",
+                \"body\": \"Resolves #${ISSUE_NUM}\n\nAutomated PR created by ${ROLE} agent.\",
+                \"head\": \"${BRANCH}\",
+                \"base\": \"main\"
+              }")
             PR_NUM=$(echo "$PR_RESPONSE" | jq -r '.number')
             echo "pr_number=${PR_NUM}" >> $GITHUB_OUTPUT
             echo "PR #${PR_NUM} created"
@@ -167,24 +152,22 @@ jobs:
 
       - name: Trigger code review
         if: success()
-        env:
-          TASK_TITLE: ${{ steps.task.outputs.title }}
         run: |
           BRANCH="${{ inputs.branch_name }}"
           ISSUE_NUM="${{ inputs.issue_number }}"
-          TITLE="${TASK_TITLE}"
+          TITLE="${{ steps.task.outputs.title }}"
           PR_NUM="${{ steps.pr.outputs.pr_number }}"
-
-          REVIEW_PAYLOAD=$(jq -cn \
-            --arg ref "${BRANCH}" \
-            --arg pr_number "${PR_NUM}" \
-            --arg issue_number "${ISSUE_NUM}" \
-            --arg pr_title "feat(#${ISSUE_NUM}): ${TITLE}" \
-            '{ref: $ref, inputs: {pr_number: $pr_number, issue_number: $issue_number, pr_title: $pr_title}}')
 
           curl -sf -X POST \
             -H "Authorization: token ${GITEA_TOKEN}" \
             -H "Content-Type: application/json" \
             "${GITEA_URL}/api/v1/repos/${{ github.repository }}/actions/workflows/code-review.yml/dispatches" \
-            -d "${REVIEW_PAYLOAD}"
+            -d "{
+              \"ref\": \"${BRANCH}\",
+              \"inputs\": {
+                \"pr_number\": \"${PR_NUM}\",
+                \"issue_number\": \"${ISSUE_NUM}\",
+                \"pr_title\": \"feat(#${ISSUE_NUM}): ${TITLE}\"
+              }
+            }"
           echo "Code review dispatched for PR #${PR_NUM} via workflow_dispatch"
